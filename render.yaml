@@ -1,0 +1,23 @@
+# Render Blueprint — 베플리카 배포 설정
+# Render 대시보드에서 이 저장소를 연결하면 아래 설정대로 자동 생성됩니다.
+services:
+  - type: web
+    name: beplica
+    runtime: node
+    plan: starter            # 항상 켜짐 + 영구 디스크 사용 가능 (유료, 약 $7/월)
+    region: singapore        # 한국에서 가장 가까운 리전
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/categories
+    autoDeploy: true         # main 브랜치에 push하면 자동 재배포
+    envVars:
+      - key: NODE_VERSION
+        value: "24"          # node:sqlite 지원
+      - key: DATA_DIR
+        value: /var/data     # 아래 영구 디스크 경로 (DB·업로드 저장)
+      - key: SESSION_SECRET
+        generateValue: true  # Render가 안전한 랜덤 값 자동 생성
+    disk:
+      name: beplica-data
+      mountPath: /var/data   # SQLite(jem.db) + 업로드 이미지가 여기 저장되어 재배포에도 유지됨
+      sizeGB: 1

@@ -1,0 +1,21 @@
+{
+  "name": "jem",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JEM · 편집샵 커뮤니티 + B2B 도매 플랫폼",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node db.js --seed"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^2.2.0",
+    "sharp": "^0.35.3"
+  }
+}
