@@ -79,11 +79,11 @@
         <section class="home-hero">
           <span class="brand"><span class="logo">B</span>베플리카</span>
           <p class="hero-en">Golf &amp; Luxury Collection</p>
-          <p>골프웨어부터 명품 패션까지,<br/>원하는 카테고리를 선택해 문의하세요.</p>
+          <p>골프 · 가방 · 의류 · 신발 · 소품<br/>원하는 카테고리를 선택해 문의하세요.</p>
         </section>
         <div class="grid">${buttons}</div>
         <div class="home-note">
-          💬 상품 문의는 각 샵의 <b>카카오톡 오픈채팅</b>으로 바로 연결됩니다.
+          💬 상품 문의·주문은 <b>카카오톡 오픈채팅</b>으로 바로 연결됩니다.
         </div>
         <a class="admin-link" href="/admin">🔑 가게 관리자 로그인</a>
         <div class="footer">© 베플리카</div>
@@ -92,11 +92,11 @@
   }
 
   /* ---------- 화면 2: 카테고리(샵 목록) ---------- */
-  async function renderCategory(catId, subcat) {
+  async function renderCategory(catId, subcat, brand) {
     await ensureCats();
     if (!catMap[catId]) return renderHome();
-    // 직판(우리샵) 모드 카테고리는 업체 목록 대신 하위카테고리 + 상품 직접 노출
-    if (catMap[catId].mode === "direct") return renderDirectCategory(catMap[catId], subcat);
+    // 직판(우리샵) 모드 카테고리는 업체 목록 대신 하위카테고리(+브랜드) + 상품 직접 노출
+    if (catMap[catId].mode === "direct") return renderDirectCategory(catMap[catId], subcat, brand);
     loading();
     let shops = [];
     try { shops = await api("/api/shops?category=" + encodeURIComponent(catId)); }
@@ -129,31 +129,90 @@
     window.scrollTo(0, 0);
   }
 
-  /* ---------- 화면 2-B: 직판(우리샵) 카테고리 — 하위카테고리 + 상품 ---------- */
-  async function renderDirectCategory(cat, subcat) {
+  /* ---------- 화면 2-B: 직판 2단계 — 하위 카테고리 타일(홈과 동일한 형태) ---------- */
+  function renderSubcatGrid(cat) {
+    const buttons = (cat.subcats || []).map((s) => {
+      const bg = s.image ? ` style="background-image:url('${esc(s.image)}')"` : "";
+      const hasImg = s.image ? " has-img" : "";
+      return `
+      <button class="cat-btn sub-tile${hasImg}"${bg} onclick="location.hash='#/cat/${esc(cat.id)}/${esc(s.id)}'">
+        <span class="cat-overlay"></span>
+        <span class="cat-text">
+          <span class="sub-tile-name">${esc(s.name)}</span>
+        </span>
+      </button>`;
+    }).join("");
+
+    app.innerHTML = `
+      <div class="view">
+        ${topbar(cat.name, "직영 스토어", "#/")}
+        <div class="grid">${buttons}</div>
+        <div class="footer">© 베플리카</div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------- 화면 2-C: 직판 3단계 — 브랜드 타일 ---------- */
+  function renderBrandGrid(cat, subcat) {
+    const sub = (cat.subcats || []).find((s) => s.id === subcat) || {};
+    const buttons = (cat.brands || []).map((b) => `
+      <button class="cat-btn brand-tile" onclick="location.hash='#/cat/${esc(cat.id)}/${esc(subcat)}/${esc(b.id)}'" aria-label="${esc(b.name)}">
+        <span class="cat-text">
+          ${b.logo
+            ? `<img class="brand-logo" src="${esc(b.logo)}" alt="${esc(b.name)}" loading="lazy" decoding="async"
+                 onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-tile-name',textContent:'${esc(b.name)}'}))" />`
+            : `<span class="brand-tile-name">${esc(b.name)}</span>`}
+        </span>
+      </button>`).join("");
+
+    app.innerHTML = `
+      <div class="view">
+        ${topbar(sub.name || cat.name, cat.name, "#/cat/" + cat.id)}
+        <div class="grid">${buttons}</div>
+        <div class="footer">© 베플리카</div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------- 화면 2-D: 직판 4단계 — 상품 목록(+상단 브랜드 이동 칩) ---------- */
+  async function renderDirectCategory(cat, subcat, brand) {
     const subs = cat.subcats || [];
-    const selected = (subcat && subs.some((s) => s.id === subcat)) ? subcat : (subs[0] && subs[0].id);
+    const brands = cat.brands || [];
+    // 2단계: 하위 카테고리 미선택 → 하위 카테고리 타일
+    if (subs.length && !subs.some((s) => s.id === subcat)) return renderSubcatGrid(cat);
+    // 3단계: 브랜드가 있는 카테고리인데 브랜드 미선택 → 브랜드 타일
+    if (brands.length && !brands.some((b) => b.id === brand)) return renderBrandGrid(cat, subcat);
+    const selected = subcat;
+    const selBrand = (brand && brands.some((b) => b.id === brand)) ? brand : "";
     loading();
     let data;
     try { data = await api("/api/direct/" + encodeURIComponent(cat.id) + "/products"); }
     catch (e) { data = { products: [], store: null }; }
-    const items = (data.products || []).filter((p) => p.subcat === selected);
+    let items = (data.products || []).filter((p) => p.subcat === selected);
+    if (selBrand) items = items.filter((p) => p.brand === selBrand);
     const store = data.store || {};
     const kakao = real(store.kakao);
     const phone = real(store.phone);
     const icon = catIcon(cat.id);
     const selName = (subs.find((s) => s.id === selected) || {}).name || "";
 
-    const nav = subs.map((s) =>
-      `<button class="subnav-item ${s.id === selected ? "on" : ""}" onclick="location.hash='#/cat/${esc(cat.id)}/${esc(s.id)}'">
-         <span class="e">${esc(s.icon || "")}</span>${esc(s.name)}
-       </button>`).join("");
+    // 상단 브랜드 이동 칩 — 다른 메이커로 바로 이동
+    const brandNav = brands.length
+      ? `<div class="brandnav">
+           ${brands.map((b) =>
+             `<button class="brand-chip ${b.id === selBrand ? "on" : ""}" onclick="location.hash='#/cat/${esc(cat.id)}/${esc(selected)}/${esc(b.id)}'">${esc(b.name)}</button>`
+           ).join("")}
+         </div>`
+      : "";
+
+    const brandName = (id) => (brands.find((b) => b.id === id) || {}).name || "";
 
     const grid = items.length
       ? `<div class="prod-grid">${items.map((p) => `
           <div class="prod-card">
             <div class="prod-thumb">${imgOrPlaceholder(p.thumb || p.image, icon, p.title)}</div>
             <div class="prod-body">
+              ${p.brand && brandName(p.brand) ? `<div class="prod-brand">${esc(brandName(p.brand))}</div>` : ""}
               <div class="prod-title">${esc(p.title)}</div>
               ${p.description ? `<div class="prod-desc">${esc(p.description)}</div>` : ""}
               <div class="prod-price">${esc(p.price || "문의")}</div>
@@ -170,10 +229,14 @@
 
     app.innerHTML = `
       <div class="view detail">
-        ${topbar(cat.name, "직영 스토어", "#/")}
-        <div class="subnav">${nav}</div>
+        ${topbar(
+          selBrand ? brandName(selBrand) : (selName || cat.name),
+          selBrand ? cat.name + " · " + selName : cat.name,
+          brands.length ? "#/cat/" + cat.id + "/" + selected : (subs.length ? "#/cat/" + cat.id : "#/")
+        )}
+        ${brandNav}
         <section class="section">
-          <h2>${esc(selName)} <small style="color:var(--muted);font-weight:600;font-size:12px">${items.length}개</small></h2>
+          <h2>${esc(selBrand ? brandName(selBrand) : selName)} <small style="color:var(--muted);font-weight:600;font-size:12px">${items.length}개</small></h2>
           ${grid}
         </section>
         <div class="footer">© 베플리카 · 직영 판매 상품</div>
@@ -289,7 +352,7 @@
   function route() {
     const hash = location.hash || "#/";
     const parts = hash.replace(/^#\//, "").split("/").filter(Boolean);
-    if (parts[0] === "cat" && parts[1]) return renderCategory(parts[1], parts[2]);
+    if (parts[0] === "cat" && parts[1]) return renderCategory(parts[1], parts[2], parts[3]);
     if (parts[0] === "shop" && parts[1]) return renderShop(parts[1]);
     return renderHome();
   }

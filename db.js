@@ -21,20 +21,41 @@ db.exec("PRAGMA foreign_keys = ON;");
 
 /* 카테고리 (공개 사이트 + 관리자 공통) */
 const CATEGORIES = [
-  { id: "golfwear", name: "골프 의류", icon: "🏌️", image: "assets/img/cat-golfwear.webp" },
-  {
-    id: "golfacc", name: "골프 잡화", icon: "⛳", image: "assets/img/cat-golfacc.webp",
-    // 직판(우리샵) 모드: 업체 목록 대신 상단 하위 카테고리 → 상품 직접 노출
-    mode: "direct",
+  // 전면 직판(우리 직영) 모델: 5개 카테고리 모두 mode 'direct' (업체 리스트 없이 하위분류 → 상품 직접 노출)
+  // 골프는 3단계: 대분류(골프) → 하위 카테고리(의류/가방/신발/소품) → 브랜드
+  { id: "golf", name: "골프", icon: "🏌️", image: "assets/img/cat-golfwear.webp", mode: "direct",
     subcats: [
-      { id: "balls", name: "골프공", icon: "⛳" },
-      { id: "caps", name: "모자", icon: "🧢" },
-      { id: "gloves", name: "장갑", icon: "🧤" },
+      { id: "wear", name: "의류", image: "assets/img/p-golfpolo.webp" },
+      { id: "bag", name: "가방", image: "assets/img/g-cartbag.webp" },
+      { id: "shoes", name: "신발", image: "assets/img/g-shoe-white.webp" },
+      { id: "acc", name: "소품", image: "assets/img/cat-golfacc.webp" },
     ],
-  },
-  { id: "luxwear", name: "명품 의류", icon: "🧥", image: "assets/img/cat-luxwear.webp" },
-  { id: "luxgoods", name: "명품 잡화", icon: "👜", image: "assets/img/cat-luxgoods.webp" },
-  { id: "luxacc", name: "명품 악세사리", icon: "💎", image: "assets/img/cat-luxacc.webp" },
+    brands: [
+      { id: "pxg", name: "PXG", logo: "assets/img/brand-pxg.webp?v=2" },
+      { id: "malbon", name: "Malbon", logo: "assets/img/brand-malbon.webp?v=2" },
+      { id: "gfore", name: "G/FORE", logo: "assets/img/brand-gfore.webp?v=2" },
+      { id: "titleist", name: "Titleist", logo: "assets/img/brand-titleist.webp?v=2" },
+      { id: "amazingcre", name: "AmazingCre", logo: "assets/img/brand-amazingcre.webp?v=2" },
+      { id: "anewgolf", name: "ANEW GOLF", logo: "assets/img/brand-anewgolf.webp?v=2" },
+    ] },
+  { id: "bags", name: "가방", icon: "👜", image: "assets/img/cat-luxgoods.webp", mode: "direct",
+    subcats: [
+      { id: "tote", name: "토트백", image: "assets/img/p-tote.webp" },
+      { id: "cross", name: "크로스백", image: "assets/img/p-crossbag.webp" },
+    ] },
+  { id: "clothing", name: "의류", icon: "🧥", image: "assets/img/cat-luxwear.webp", mode: "direct",
+    subcats: [
+      { id: "outer", name: "아우터", image: "assets/img/p-cashcoat.webp" },
+      { id: "top", name: "상의", image: "assets/img/p-golfknit.webp" },
+      { id: "bottom", name: "하의", image: "assets/img/p-golfpants.webp" },
+    ] },
+  { id: "shoes", name: "신발", icon: "👟", image: "assets/img/cat-shoes.webp", mode: "direct",
+    subcats: [
+      { id: "sneakers", name: "스니커즈", image: "assets/img/shoe-white.webp" },
+      { id: "dress", name: "구두", image: "assets/img/shoe-loafer.webp" },
+    ] },
+  { id: "acc", name: "소품", icon: "💎", image: "assets/img/cat-luxacc.webp", mode: "direct",
+    subcats: [ { id: "jewelry", name: "주얼리", image: "assets/img/p-necklace.webp" } ] },
 ];
 
 /* 무료 업로드 기본 한도 (초과 시 향후 과금 — 지금은 잠금만) */
@@ -100,6 +121,7 @@ function init() {
   try { db.exec("ALTER TABLE products ADD COLUMN thumb TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE products ADD COLUMN category TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE products ADD COLUMN subcat TEXT"); } catch (e) {} // 직판 하위 카테고리
+  try { db.exec("ALTER TABLE products ADD COLUMN brand TEXT"); } catch (e) {}  // 브랜드(3단계)
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_products_shop ON products(shop_id);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders(buyer_shop_id);`);
@@ -150,120 +172,106 @@ function seedIfEmpty() {
     tagline: "플랫폼 관리자",
   });
 
-  // 본사 공급(도매) 상품 — 가게 사장만 B2B 피드에서 봄, 소비자는 안 보임
-  // ago: 등록일을 서로 다르게(오늘/이번주/지난주/지난달) 두어 일별·주별·월별 구분 데모
-  const supply = [
-    { title: "[본사공급] 기능성 골프 티셔츠", category: "golfwear", price: "도매 15,000원", description: "흡습속건 · 전 사이즈", ago: "-0 days" },
-    { title: "[본사공급] 프리미엄 골프 장갑", category: "golfacc", price: "도매 7,000원", description: "양피 · 좌/우", ago: "-2 days" },
-    { title: "[본사공급] 캐시미어 혼방 코트", category: "luxwear", price: "도매 89,000원", description: "차콜/카멜", ago: "-9 days" },
-    { title: "[본사공급] 실버 미니 목걸이", category: "luxacc", price: "도매 12,000원", description: "925 실버", ago: "-40 days" },
+  // === 직영 스토어(우리 직판) — 모든 상품을 베플리카가 직접 판매 ===
+  // (B2B 입점/중간유통 마진 기능은 코드에 남아있으나 현재 비활성: 입점 벤더 없음)
+  const storeId = insertShop({
+    username: "store", password: "store1234", role: "official", name: "베플리카",
+    tagline: "직영 스토어",
+    kakao: "https://open.kakao.com/o/여기에_오픈채팅_링크",
+  });
+
+  // [상품명, 카테고리, 하위분류, 이미지슬러그, 가격, 설명, 브랜드]
+  const catalog = [
+    // === 골프 > 의류 ===
+    ["남성 골프 폴로 티셔츠", "golf", "wear", "p-golfpolo", "148,000원", "냉감 · 4color", "pxg"],
+    ["하프집업 니트", "golf", "wear", "p-golfknit", "168,000원", "", "malbon"],
+    ["방풍 골프 자켓", "golf", "wear", "p-golfjacket", "289,000원", "", "gfore"],
+    ["스판 골프 팬츠", "golf", "wear", "p-golfpants", "162,000원", "", "titleist"],
+    ["여성 플리츠 스커트", "golf", "wear", "p-golfskirt", "154,000원", "", "amazingcre"],
+    ["여성 골프 원피스", "golf", "wear", "g-dress", "198,000원", "", "anewgolf"],
+    ["남성 퀼팅 베스트", "golf", "wear", "g-vest", "228,000원", "", "pxg"],
+    // === 골프 > 가방 ===
+    ["캐디백", "golf", "bag", "g-cartbag", "690,000원", "경량 카트백", "pxg"],
+    ["스탠드백", "golf", "bag", "g-standbag", "540,000원", "", "malbon"],
+    ["보스턴백", "golf", "bag", "g-bostonbag", "380,000원", "", "gfore"],
+    ["골프 파우치", "golf", "bag", "g-pouch", "128,000원", "", "titleist"],
+    ["여성 캐디백", "golf", "bag", "g-cartbag", "720,000원", "", "amazingcre"],
+    ["경량 보스턴백", "golf", "bag", "g-bostonbag", "340,000원", "", "anewgolf"],
+    // === 골프 > 신발 ===
+    ["화이트 스파이크 골프화", "golf", "shoes", "g-shoe-white", "289,000원", "방수", "pxg"],
+    ["스파이크리스 골프화", "golf", "shoes", "g-shoe-black", "259,000원", "", "malbon"],
+    ["니트 골프 스니커즈", "golf", "shoes", "g-shoe-knit", "245,000원", "", "gfore"],
+    ["투어 스파이크 골프화", "golf", "shoes", "g-shoe-white", "298,000원", "", "titleist"],
+    ["여성 스파이크리스", "golf", "shoes", "g-shoe-black", "239,000원", "", "amazingcre"],
+    ["데일리 골프화", "golf", "shoes", "g-shoe-knit", "215,000원", "", "anewgolf"],
+    // === 골프 > 소품 ===
+    ["투어 3피스 골프공 (12구)", "golf", "acc", "d-ball-tour", "72,000원", "화이트 · 3피스", "titleist"],
+    ["컬러 골프공 세트", "golf", "acc", "d-ball-color", "48,000원", "파스텔 6구", "malbon"],
+    ["골프 버킷햇", "golf", "acc", "d-cap-bucket", "89,000원", "자외선 차단", "malbon"],
+    ["골프 캡", "golf", "acc", "d-cap-ball", "79,000원", "", "pxg"],
+    ["골프 바이저", "golf", "acc", "d-cap-visor", "72,000원", "", "amazingcre"],
+    ["프리미엄 양피 장갑", "golf", "acc", "d-glove-leather", "42,000원", "양피 · 좌/우", "gfore"],
+    ["여름 메쉬 장갑", "golf", "acc", "d-glove-mesh", "36,000원", "통기성", "anewgolf"],
+    ["헤드커버 세트", "golf", "acc", "g-headcover", "128,000원", "니트 3P", "gfore"],
+    ["골프 우산", "golf", "acc", "g-umbrella", "98,000원", "", "titleist"],
+    ["레더 골프 벨트", "golf", "acc", "g-belt", "118,000원", "", "pxg"],
+    // 가방
+    ["레더 토트백", "bags", "tote", "p-tote", "240,000원", "베스트"],
+    ["미니 크로스백", "bags", "cross", "p-crossbag", "175,000원", ""],
+    // 의류
+    ["캐시미어 코트", "clothing", "outer", "p-cashcoat", "320,000원", "차콜/카멜"],
+    ["울 블레이저", "clothing", "outer", "p-blazer", "180,000원", ""],
+    ["방풍 자켓", "clothing", "outer", "p-golfjacket", "89,000원", ""],
+    ["폴로 티셔츠", "clothing", "top", "p-golfpolo", "48,000원", "냉감 · 4color"],
+    ["하프집업 니트", "clothing", "top", "p-golfknit", "58,000원", ""],
+    ["스판 슬랙스", "clothing", "bottom", "p-golfpants", "62,000원", ""],
+    ["플리츠 스커트", "clothing", "bottom", "p-golfskirt", "54,000원", ""],
+    // 신발
+    ["화이트 스니커즈", "shoes", "sneakers", "shoe-white", "89,000원", "미니멀"],
+    ["청키 스니커즈", "shoes", "sneakers", "shoe-chunky", "98,000원", ""],
+    ["페니 로퍼", "shoes", "dress", "shoe-loafer", "120,000원", "탄 레더"],
+    ["더비 슈즈", "shoes", "dress", "shoe-derby", "145,000원", ""],
+    // 소품
+    ["실버 체인 목걸이", "acc", "jewelry", "p-necklace", "68,000원", ""],
+    ["골드 브레이슬릿", "acc", "jewelry", "p-bracelet", "95,000원", ""],
   ];
-  const supplyProducts = [];
-  for (const p of supply) {
-    const info = db.prepare(
-      `INSERT INTO products (shop_id, title, description, price, category, kind, created_at)
-       VALUES (?, ?, ?, ?, ?, 'new', datetime('now', ?))`
-    ).run(platformId, p.title, p.description || null, p.price || null, p.category, p.ago || "+0 days");
-    supplyProducts.push({ id: Number(info.lastInsertRowid), title: p.title, price: p.price, category: p.category });
+  const P = "/assets/img/";
+  const ip = db.prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, category, subcat, brand, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')");
+  for (const [t, cat, sub, slug, price, desc, brand] of catalog) {
+    const img = P + slug + ".webp";
+    ip.run(storeId, t, desc || null, price, img, img, cat, sub, brand || null);
   }
+  void platformId; // 본사 계정은 관리자 로그인용으로 유지 (현재 시드엔 미사용)
 
-  // 샘플 가게 계정 (username / 비밀번호: shop1234)
-  const shops = [
-    {
-      username: "greenfair", password: "shop1234", name: "그린페어웨이", category: "golfwear",
-      area: "온라인", tagline: "남녀 골프웨어 편집샵", image: "/assets/img/cover-greenfair.webp",
-      intro: "필드룩부터 라운딩 데일리까지. 신상 매주 입고.",
-      kakao: "https://open.kakao.com/o/여기에_오픈채팅_링크",
-      products: [
-        { title: "남성 골프 폴로 티셔츠", price: "48,000원", kind: "new", description: "냉감 · 4color", image: "/assets/img/p-golfpolo.webp" },
-        { title: "여성 플리츠 골프 스커트", price: "54,000원", kind: "signature", description: "베스트", image: "/assets/img/p-golfskirt.webp" },
-        { title: "방풍 골프 자켓", price: "89,000원", kind: "new", image: "/assets/img/p-golfjacket.webp" },
-      ],
-    },
-    {
-      username: "teeup", password: "shop1234", name: "티업", category: "golfwear",
-      area: "온라인", tagline: "프리미엄 골프 의류", image: "/assets/img/cover-teeup.webp",
-      intro: "라운딩을 위한 프리미엄 라인.",
-      products: [
-        { title: "스판 골프 팬츠", price: "62,000원", kind: "signature", image: "/assets/img/p-golfpants.webp" },
-        { title: "하프집업 니트", price: "58,000원", kind: "new", image: "/assets/img/p-golfknit.webp" },
-      ],
-    },
-    {
-      // 골프 잡화 직영 스토어(우리샵) — role 'official' → 업체 목록/피드엔 안 나오고, 직판 모드로만 노출
-      username: "gearshop", password: "shop1234", role: "official", name: "베플리카 골프기어",
-      category: "golfacc", area: "공식 스토어", tagline: "베플리카 직영 골프 잡화",
-      intro: "베플리카가 직접 판매하는 골프 잡화 스토어입니다.",
-      kakao: "https://open.kakao.com/o/여기에_오픈채팅_링크",
-      products: [
-        { title: "투어 3피스 골프공 (12구)", price: "32,000원", subcat: "balls", image: "/assets/img/d-ball-tour.webp", description: "화이트 · 3피스" },
-        { title: "컬러 골프공 세트", price: "22,000원", subcat: "balls", image: "/assets/img/d-ball-color.webp", description: "파스텔 6구" },
-        { title: "골프 버킷햇", price: "34,000원", subcat: "caps", image: "/assets/img/d-cap-bucket.webp", description: "자외선 차단" },
-        { title: "골프 캡", price: "29,000원", subcat: "caps", image: "/assets/img/d-cap-ball.webp" },
-        { title: "골프 바이저", price: "26,000원", subcat: "caps", image: "/assets/img/d-cap-visor.webp" },
-        { title: "프리미엄 양피 장갑", price: "21,000원", subcat: "gloves", image: "/assets/img/d-glove-leather.webp", description: "양피 · 좌/우" },
-        { title: "여름 메쉬 장갑", price: "16,000원", subcat: "gloves", image: "/assets/img/d-glove-mesh.webp", description: "통기성" },
-      ],
-    },
-    {
-      username: "raum", password: "shop1234", name: "라움 셀렉트", category: "luxwear",
-      area: "온라인", tagline: "명품 의류 편집샵", image: "/assets/img/cover-raum.webp",
-      intro: "시즌 셀렉트 아우터·자켓.",
-      products: [
-        { title: "캐시미어 코트", price: "320,000원", kind: "signature", description: "차콜/카멜", image: "/assets/img/p-cashcoat.webp" },
-        { title: "울 블레이저", price: "180,000원", kind: "new", image: "/assets/img/p-blazer.webp" },
-      ],
-    },
-    {
-      username: "maisonbag", password: "shop1234", name: "메종 백", category: "luxgoods",
-      area: "온라인", tagline: "명품 잡화 · 가방", image: "/assets/img/cover-maisonbag.webp",
-      intro: "레더 백 & 소품.",
-      products: [
-        { title: "레더 토트백", price: "240,000원", kind: "signature", description: "베스트", image: "/assets/img/p-tote.webp" },
-        { title: "미니 크로스백", price: "175,000원", kind: "new", image: "/assets/img/p-crossbag.webp" },
-      ],
-    },
-    {
-      username: "luce", password: "shop1234", name: "루체 주얼리", category: "luxacc",
-      area: "온라인", tagline: "명품 악세사리 · 주얼리", image: "/assets/img/cover-luce.webp",
-      intro: "데일리 실버·골드 주얼리.",
-      products: [
-        { title: "실버 체인 목걸이", price: "68,000원", kind: "new", image: "/assets/img/p-necklace.webp" },
-        { title: "골드 브레이슬릿", price: "95,000원", kind: "signature", image: "/assets/img/p-bracelet.webp" },
-      ],
-    },
-  ];
-
-  const shopByUser = {};
-  for (const s of shops) {
-    const id = insertShop(s);
-    shopByUser[s.username] = id;
-    for (const p of s.products || []) insertProduct(id, p);
-  }
-
-  // 공급 상품 주문 샘플 (정산/대금청구 데모용) — 구매자=가게, 판매자=본사
-  const sp = {};
-  for (const p of supplyProducts) sp[p.category] = p; // 카테고리로 참조
-  function seedOrder(buyerUser, prod, qty, status, ago, note) {
-    if (!shopByUser[buyerUser] || !prod) return;
-    db.prepare(
-      `INSERT INTO orders (buyer_shop_id, seller_shop_id, product_id, product_title, unit_price, qty, note, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?))`
-    ).run(shopByUser[buyerUser], platformId, prod.id, prod.title, prod.price, qty, note || null, status, ago);
-  }
-  seedOrder("greenfair",  sp.golfwear, 50, "done",      "-3 days",  "완납");
-  seedOrder("maisonbag",  sp.luxwear,  30, "shipped",   "-1 days",  "");
-  seedOrder("raum",       sp.luxwear,  20, "accepted",  "-0 days",  "추가 발주 예정");
-  seedOrder("greenfair",  sp.golfacc,  10, "requested", "-0 days",  "");
-  seedOrder("teeup",      sp.golfacc,  15, "canceled",  "-2 days",  "재고 부족으로 취소");
-  seedOrder("greenfair",  sp.luxacc,    5, "done",      "-20 days", "지난달 주문");
+  // ※ B2B 입점 벤더 시드는 현재 모델(전면 직판)에서 비활성화.
+  //   기능(입점 가게 계정·B2B 피드·주문/정산)은 코드에 그대로 남아 있어,
+  //   추후 가게 계정을 발급하면 바로 다시 동작합니다.
 
   return true;
 }
 
+/* ---------- 카테고리 개편 시 자동 정리 ----------
+   상품의 카테고리가 '전부' 현재 CATEGORIES 에 없는 옛 값일 때만 초기화 후 재시드한다.
+   → 현재 카테고리에 속한 상품이 하나라도 있으면(=실데이터 존재) 절대 건드리지 않음. */
+function reseedIfStale() {
+  const valid = new Set(CATEGORIES.map((c) => c.id));
+  const cats = db
+    .prepare("SELECT DISTINCT category AS c FROM products WHERE active=1 AND category IS NOT NULL")
+    .all()
+    .map((r) => r.c);
+  if (!cats.length) return false;
+  if (cats.some((c) => valid.has(c))) return false; // 유효 데이터 있음 → 유지
+  db.exec("DELETE FROM orders;");
+  db.exec("DELETE FROM products;");
+  db.exec("DELETE FROM shops;");
+  const did = seedIfEmpty();
+  if (did) console.log("♻️  카테고리 개편 감지 — 옛 데모 데이터를 새 구조로 재시드했습니다.");
+  return did;
+}
+
 init();
 
-module.exports = { db, CATEGORIES, FREE_PRODUCT_LIMIT, seedIfEmpty };
+module.exports = { db, CATEGORIES, FREE_PRODUCT_LIMIT, seedIfEmpty, reseedIfStale };
 
 /* 직접 실행 시 시드 (npm run seed) */
 if (require.main === module) {

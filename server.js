@@ -15,9 +15,10 @@ const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs");
 
-const { db, CATEGORIES, FREE_PRODUCT_LIMIT, seedIfEmpty } = require("./db");
+const { db, CATEGORIES, FREE_PRODUCT_LIMIT, seedIfEmpty, reseedIfStale } = require("./db");
 
-seedIfEmpty(); // 비어있으면 샘플 시드
+seedIfEmpty();   // 비어있으면 샘플 시드
+reseedIfStale(); // 카테고리 개편으로 옛 데모 데이터만 남았으면 새 구조로 재시드
 
 const app = express();
 const PORT = process.env.PORT || 4600;
@@ -169,16 +170,17 @@ app.get("/api/direct/:catId/products", (req, res) => {
     return res.status(404).json({ error: "직판 카테고리가 아닙니다." });
   const rows = db
     .prepare(
-      `SELECT p.id, p.title, p.description, p.price, p.image, p.thumb, p.subcat, p.created_at
+      `SELECT p.id, p.title, p.description, p.price, p.image, p.thumb, p.subcat, p.brand, p.created_at
        FROM products p JOIN shops s ON s.id = p.shop_id
        WHERE s.role='official' AND s.active=1 AND p.active=1
          AND COALESCE(p.category, s.category) = ?
        ORDER BY p.subcat, p.id`
     )
     .all(req.params.catId);
-  const store = db
-    .prepare("SELECT name, kakao, phone FROM shops WHERE role='official' AND category=? AND active=1 LIMIT 1")
-    .get(req.params.catId);
+  // 직영 스토어: 해당 카테고리 전담 스토어가 있으면 그것, 없으면 공용 직영 스토어
+  const store =
+    db.prepare("SELECT name, kakao, phone FROM shops WHERE role='official' AND category=? AND active=1 LIMIT 1").get(req.params.catId) ||
+    db.prepare("SELECT name, kakao, phone FROM shops WHERE role='official' AND active=1 ORDER BY id LIMIT 1").get();
   res.json({ products: rows, store: store || null });
 });
 
