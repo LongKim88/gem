@@ -155,6 +155,11 @@ button { font-family: inherit; cursor: pointer; }
 }
 .cat-btn:active { transform: scale(0.97); filter: brightness(1.15); }
 
+/* 홈 대분류: 세로 1열 배너형 */
+.grid.grid-stack { grid-template-columns: 1fr; }
+.grid.grid-stack .cat-btn { aspect-ratio: 1 / 0.42; }
+.grid.grid-stack .cat-btn .label { font-size: 19px; letter-spacing: 0.5px; }
+
 /* 이미지 배경 위 가독성용 오버레이 (다크→투명 그라데이션) */
 .cat-overlay {
   position: absolute; inset: 0;
@@ -519,9 +524,11 @@ button { font-family: inherit; cursor: pointer; }
   aspect-ratio: 1 / 0.62;
 }
 .cat-btn.brand-tile .cat-text { margin: auto; padding: 14px; width: 100%; }
+/* 로고 없는 브랜드의 텍스트 표기 — 실제 로고(흰색)와 톤을 맞춤 */
 .brand-tile-name {
-  font-size: 17px; font-weight: 900; color: var(--gold);
-  letter-spacing: 0.5px; text-align: center; line-height: 1.25;
+  font-size: 17px; font-weight: 800; color: #fff;
+  letter-spacing: 1.2px; text-align: center; line-height: 1.25;
+  opacity: 0.95;
 }
 /* 브랜드 로고 — 동일 규격(440x200)으로 정규화된 흰색 로고 */
 .brand-logo {
@@ -529,6 +536,43 @@ button { font-family: inherit; cursor: pointer; }
   margin: 0 auto; display: block;
   opacity: 0.95;
 }
+
+/* ---------- 구매대행 상담 페이지 ---------- */
+.consult-hero p { color: var(--ink); font-size: 14.5px; line-height: 1.75; }
+.consult-hero b { color: var(--gold); }
+
+.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.steps li {
+  position: relative; padding: 12px 0 12px 42px;
+  border-bottom: 1px dashed var(--line); counter-increment: step;
+}
+.steps li:last-child { border-bottom: none; }
+.steps li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: 12px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--gold);
+  border: 1px solid rgba(231, 195, 122, 0.35);
+  display: grid; place-items: center;
+  font-size: 12.5px; font-weight: 900;
+}
+.steps .s-title { font-weight: 800; font-size: 14.5px; }
+.steps .s-desc { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+.tips { margin: 0; padding-left: 18px; }
+.tips li { color: var(--ink); font-size: 14px; padding: 5px 0; }
+.tips li::marker { color: var(--accent); }
+
+.consult-cta { text-align: center; }
+.kakao-big {
+  display: block; width: 100%;
+  background: var(--kakao); color: var(--kakao-text);
+  border-radius: 14px; padding: 17px 12px;
+  font-size: 16px; font-weight: 900;
+  box-shadow: 0 6px 18px rgba(254, 229, 0, 0.16);
+}
+.kakao-big:active { filter: brightness(0.93); }
+.cta-note { color: var(--muted); font-size: 12.5px; margin: 12px 0 0 !important; }
 
 /* 상품 카드의 브랜드 라벨 */
 .prod-brand {

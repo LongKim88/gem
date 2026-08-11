@@ -38,24 +38,36 @@ const CATEGORIES = [
       { id: "amazingcre", name: "AmazingCre", logo: "assets/img/brand-amazingcre.webp?v=2" },
       { id: "anewgolf", name: "ANEW GOLF", logo: "assets/img/brand-anewgolf.webp?v=2" },
     ] },
-  { id: "bags", name: "가방", icon: "👜", image: "assets/img/cat-luxgoods.webp", mode: "direct",
+  { id: "luxury", name: "럭셔리", icon: "✨", image: "assets/img/cat-luxwear.webp", mode: "direct",
     subcats: [
-      { id: "tote", name: "토트백", image: "assets/img/p-tote.webp" },
-      { id: "cross", name: "크로스백", image: "assets/img/p-crossbag.webp" },
+      { id: "wear", name: "의류", image: "assets/img/p-cashcoat.webp" },
+      { id: "bag", name: "가방", image: "assets/img/p-tote.webp" },
+      { id: "shoes", name: "신발", image: "assets/img/shoe-loafer.webp" },
+      { id: "acc", name: "악세사리", image: "assets/img/p-necklace.webp" },
+    ],
+    // logo 값이 없는 브랜드는 브랜드명 타이포로 표시됨 (CHANEL·BOTTEGA VENETA 로고 대기중)
+    brands: [
+      { id: "chanel", name: "CHANEL" },
+      { id: "louisvuitton", name: "LOUIS VUITTON", logo: "assets/img/brand-louisvuitton.webp?v=1" },
+      { id: "gucci", name: "GUCCI", logo: "assets/img/brand-gucci.webp?v=1" },
+      { id: "dior", name: "DIOR", logo: "assets/img/brand-dior.webp?v=1" },
+      { id: "prada", name: "PRADA", logo: "assets/img/brand-prada.webp?v=1" },
+      { id: "bottegaveneta", name: "BOTTEGA VENETA" },
+      { id: "celine", name: "CELINE", logo: "assets/img/brand-celine.webp?v=1" },
+      { id: "saintlaurent", name: "SAINT LAURENT", logo: "assets/img/brand-saintlaurent.webp?v=1" },
+      { id: "goyard", name: "GOYARD", logo: "assets/img/brand-goyard.webp?v=1" },
+      { id: "moncler", name: "MONCLER", logo: "assets/img/brand-moncler.webp?v=1" },
+      { id: "burberry", name: "BURBERRY", logo: "assets/img/brand-burberry.webp?v=1" },
+      { id: "balenciaga", name: "BALENCIAGA", logo: "assets/img/brand-balenciaga.webp?v=1" },
     ] },
-  { id: "clothing", name: "의류", icon: "🧥", image: "assets/img/cat-luxwear.webp", mode: "direct",
+  // consult: true → 하위 카테고리 선택 시 상품 목록 대신 '상담 페이지'(카카오톡 오픈톡 연결)
+  { id: "order", name: "구매대행", icon: "🧾", image: "assets/img/cat-luxgoods.webp", mode: "direct", consult: true,
     subcats: [
-      { id: "outer", name: "아우터", image: "assets/img/p-cashcoat.webp" },
-      { id: "top", name: "상의", image: "assets/img/p-golfknit.webp" },
-      { id: "bottom", name: "하의", image: "assets/img/p-golfpants.webp" },
+      { id: "wear", name: "의류", image: "assets/img/p-blazer.webp" },
+      { id: "bag", name: "가방", image: "assets/img/p-crossbag.webp" },
+      { id: "shoes", name: "신발", image: "assets/img/shoe-white.webp" },
+      { id: "acc", name: "악세사리", image: "assets/img/p-bracelet.webp" },
     ] },
-  { id: "shoes", name: "신발", icon: "👟", image: "assets/img/cat-shoes.webp", mode: "direct",
-    subcats: [
-      { id: "sneakers", name: "스니커즈", image: "assets/img/shoe-white.webp" },
-      { id: "dress", name: "구두", image: "assets/img/shoe-loafer.webp" },
-    ] },
-  { id: "acc", name: "소품", icon: "💎", image: "assets/img/cat-luxacc.webp", mode: "direct",
-    subcats: [ { id: "jewelry", name: "주얼리", image: "assets/img/p-necklace.webp" } ] },
 ];
 
 /* 무료 업로드 기본 한도 (초과 시 향후 과금 — 지금은 잠금만) */
@@ -122,6 +134,25 @@ function init() {
   try { db.exec("ALTER TABLE products ADD COLUMN category TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE products ADD COLUMN subcat TEXT"); } catch (e) {} // 직판 하위 카테고리
   try { db.exec("ALTER TABLE products ADD COLUMN brand TEXT"); } catch (e) {}  // 브랜드(3단계)
+
+  // 럭셔리 브랜드 도입 전에 등록된 상품에 브랜드 채우기 (비어있는 것만)
+  try {
+    const fix = [
+      ["캐시미어 코트", "burberry"], ["울 블레이저", "saintlaurent"], ["캐시미어 혼방 코트", "moncler"],
+      ["레더 토트백", "louisvuitton"], ["미니 크로스백", "chanel"],
+      ["페니 로퍼", "gucci"], ["더비 슈즈", "prada"], ["화이트 스니커즈", "balenciaga"], ["청키 스니커즈", "celine"],
+      ["실버 체인 목걸이", "dior"], ["골드 브레이슬릿", "celine"], ["실버 미니 목걸이", "saintlaurent"],
+    ];
+    const up = db.prepare("UPDATE products SET brand=? WHERE category='luxury' AND title=? AND (brand IS NULL OR brand='')");
+    for (const [t, b] of fix) up.run(b, t);
+  } catch (e) {}
+
+  // 문구 정리: 주문구매 → 구매대행 (이미 반영됐으면 아무 일도 없음)
+  try {
+    db.exec("UPDATE products SET price='구매대행 문의' WHERE category='order' AND price='주문 문의'");
+    db.exec("UPDATE products SET description='사이즈 지정 가능' WHERE category='order' AND description IN ('사이즈 맞춤 주문','사이즈 주문')");
+    db.exec("UPDATE products SET description='컬러 선택 가능' WHERE category='order' AND description='컬러 선택 주문'");
+  } catch (e) {}
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_products_shop ON products(shop_id);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders(buyer_shop_id);`);
@@ -215,25 +246,32 @@ function seedIfEmpty() {
     ["헤드커버 세트", "golf", "acc", "g-headcover", "128,000원", "니트 3P", "gfore"],
     ["골프 우산", "golf", "acc", "g-umbrella", "98,000원", "", "titleist"],
     ["레더 골프 벨트", "golf", "acc", "g-belt", "118,000원", "", "pxg"],
-    // 가방
-    ["레더 토트백", "bags", "tote", "p-tote", "240,000원", "베스트"],
-    ["미니 크로스백", "bags", "cross", "p-crossbag", "175,000원", ""],
-    // 의류
-    ["캐시미어 코트", "clothing", "outer", "p-cashcoat", "320,000원", "차콜/카멜"],
-    ["울 블레이저", "clothing", "outer", "p-blazer", "180,000원", ""],
-    ["방풍 자켓", "clothing", "outer", "p-golfjacket", "89,000원", ""],
-    ["폴로 티셔츠", "clothing", "top", "p-golfpolo", "48,000원", "냉감 · 4color"],
-    ["하프집업 니트", "clothing", "top", "p-golfknit", "58,000원", ""],
-    ["스판 슬랙스", "clothing", "bottom", "p-golfpants", "62,000원", ""],
-    ["플리츠 스커트", "clothing", "bottom", "p-golfskirt", "54,000원", ""],
-    // 신발
-    ["화이트 스니커즈", "shoes", "sneakers", "shoe-white", "89,000원", "미니멀"],
-    ["청키 스니커즈", "shoes", "sneakers", "shoe-chunky", "98,000원", ""],
-    ["페니 로퍼", "shoes", "dress", "shoe-loafer", "120,000원", "탄 레더"],
-    ["더비 슈즈", "shoes", "dress", "shoe-derby", "145,000원", ""],
-    // 소품
-    ["실버 체인 목걸이", "acc", "jewelry", "p-necklace", "68,000원", ""],
-    ["골드 브레이슬릿", "acc", "jewelry", "p-bracelet", "95,000원", ""],
+    // === 럭셔리 > 의류 ===  (브랜드 배정은 데모용 — 실제 상품으로 교체 필요)
+    ["캐시미어 코트", "luxury", "wear", "p-cashcoat", "320,000원", "차콜/카멜", "burberry"],
+    ["울 블레이저", "luxury", "wear", "p-blazer", "180,000원", "", "saintlaurent"],
+    ["캐시미어 혼방 코트", "luxury", "wear", "p-supcoat", "289,000원", "", "moncler"],
+    // === 럭셔리 > 가방 ===
+    ["레더 토트백", "luxury", "bag", "p-tote", "240,000원", "베스트", "louisvuitton"],
+    ["미니 크로스백", "luxury", "bag", "p-crossbag", "175,000원", "", "chanel"],
+    // === 럭셔리 > 신발 ===
+    ["페니 로퍼", "luxury", "shoes", "shoe-loafer", "120,000원", "탄 레더", "gucci"],
+    ["더비 슈즈", "luxury", "shoes", "shoe-derby", "145,000원", "", "prada"],
+    ["화이트 스니커즈", "luxury", "shoes", "shoe-white", "89,000원", "미니멀", "balenciaga"],
+    ["청키 스니커즈", "luxury", "shoes", "shoe-chunky", "98,000원", "", "celine"],
+    // === 럭셔리 > 악세사리 ===
+    ["실버 체인 목걸이", "luxury", "acc", "p-necklace", "68,000원", "", "dior"],
+    ["골드 브레이슬릿", "luxury", "acc", "p-bracelet", "95,000원", "", "celine"],
+    ["실버 미니 목걸이", "luxury", "acc", "p-supnecklace", "72,000원", "925 실버", "saintlaurent"],
+
+    // === 구매대행 (원하는 상품을 대신 구매·배송) ===
+    ["테일러드 자켓", "order", "wear", "p-blazer", "구매대행 문의", "사이즈 지정 가능"],
+    ["캐시미어 코트", "order", "wear", "p-supcoat", "구매대행 문의", "컬러 선택 가능"],
+    ["레더 크로스백", "order", "bag", "p-crossbag", "구매대행 문의", "재고 확인 후 안내"],
+    ["레더 토트백", "order", "bag", "p-tote", "구매대행 문의", "재고 확인 후 안내"],
+    ["스니커즈", "order", "shoes", "shoe-white", "구매대행 문의", "사이즈 지정 가능"],
+    ["드레스 슈즈", "order", "shoes", "shoe-derby", "구매대행 문의", "사이즈 지정 가능"],
+    ["골드 브레이슬릿", "order", "acc", "p-bracelet", "구매대행 문의", "각인 가능"],
+    ["실버 목걸이", "order", "acc", "p-necklace", "구매대행 문의", ""],
   ];
   const P = "/assets/img/";
   const ip = db.prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, category, subcat, brand, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')");

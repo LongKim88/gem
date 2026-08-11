@@ -79,9 +79,9 @@
         <section class="home-hero">
           <span class="brand"><span class="logo">B</span>베플리카</span>
           <p class="hero-en">Golf &amp; Luxury Collection</p>
-          <p>골프 · 가방 · 의류 · 신발 · 소품<br/>원하는 카테고리를 선택해 문의하세요.</p>
+          <p>골프 · 럭셔리 · 구매대행<br/>원하는 카테고리를 선택해 문의하세요.</p>
         </section>
-        <div class="grid">${buttons}</div>
+        <div class="grid grid-stack">${buttons}</div>
         <div class="home-note">
           💬 상품 문의·주문은 <b>카카오톡 오픈채팅</b>으로 바로 연결됩니다.
         </div>
@@ -152,6 +152,71 @@
     window.scrollTo(0, 0);
   }
 
+  /* ---------- 화면 2-B': 구매대행 상담 페이지 ---------- */
+  async function renderConsult(cat, subcat) {
+    const sub = (cat.subcats || []).find((s) => s.id === subcat) || {};
+    loading();
+    let store = {};
+    try {
+      const d = await api("/api/direct/" + encodeURIComponent(cat.id) + "/products");
+      store = d.store || {};
+    } catch (e) {}
+    const kakao = real(store.kakao);
+    const phone = real(store.phone);
+
+    const steps = [
+      ["원하는 상품 알려주기", "브랜드·모델명, 또는 사진·상품 링크를 보내주세요."],
+      ["견적 안내", "상품가 · 수수료 · 배송비를 포함한 총 금액을 안내드립니다."],
+      ["결제 후 구매 진행", "확인해 주시면 현지에서 정품으로 구매를 진행합니다."],
+      ["배송 및 수령", "진행 상황을 단계별로 안내드리고 국내로 배송합니다."],
+    ];
+
+    app.innerHTML = `
+      <div class="view detail">
+        ${topbar(sub.name || cat.name, cat.name, "#/cat/" + cat.id)}
+
+        <section class="section consult-hero">
+          <h2>💬 ${esc(sub.name || "")} 구매대행 상담</h2>
+          <p>찾으시는 상품을 알려주시면 <b>대신 구매해서 배송</b>해 드립니다.<br/>
+             매장에 없는 모델도 문의해 주세요.</p>
+        </section>
+
+        <section class="section">
+          <h2>📋 진행 절차</h2>
+          <ol class="steps">
+            ${steps.map(([t, d]) => `
+              <li>
+                <div class="s-title">${esc(t)}</div>
+                <div class="s-desc">${esc(d)}</div>
+              </li>`).join("")}
+          </ol>
+        </section>
+
+        <section class="section">
+          <h2>📝 문의 시 알려주시면 빠릅니다</h2>
+          <ul class="tips">
+            <li>브랜드 / 모델명 (또는 상품 사진·링크)</li>
+            <li>사이즈 · 색상 등 옵션</li>
+            <li>희망 수량, 필요하신 시기</li>
+          </ul>
+        </section>
+
+        <section class="section consult-cta">
+          <a class="kakao-big" ${kakao ? `href="${esc(kakao)}" target="_blank" rel="noopener"` : `href="#" onclick="event.preventDefault();window.__soon()"`}>
+            💬 카카오톡 오픈채팅으로 상담하기
+          </a>
+          <p class="cta-note">${kakao ? "버튼을 누르면 오픈채팅으로 연결됩니다." : "상담 채널 준비 중입니다. 곧 오픈 예정입니다."}</p>
+        </section>
+
+        <div class="footer">© 베플리카 · 구매대행</div>
+      </div>
+      <div class="book-bar">
+        ${contactBtn("kakao", kakao, "💬 카카오 상담")}
+        ${phone ? `<a class="phone" href="tel:${esc(phone)}">📞 전화</a>` : ""}
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
   /* ---------- 화면 2-C: 직판 3단계 — 브랜드 타일 ---------- */
   function renderBrandGrid(cat, subcat) {
     const sub = (cat.subcats || []).find((s) => s.id === subcat) || {};
@@ -180,6 +245,8 @@
     const brands = cat.brands || [];
     // 2단계: 하위 카테고리 미선택 → 하위 카테고리 타일
     if (subs.length && !subs.some((s) => s.id === subcat)) return renderSubcatGrid(cat);
+    // 상담형 카테고리(구매대행): 상품 목록 대신 상담 페이지
+    if (cat.consult) return renderConsult(cat, subcat);
     // 3단계: 브랜드가 있는 카테고리인데 브랜드 미선택 → 브랜드 타일
     if (brands.length && !brands.some((b) => b.id === brand)) return renderBrandGrid(cat, subcat);
     const selected = subcat;
