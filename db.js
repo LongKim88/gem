@@ -135,6 +135,32 @@ function init() {
   try { db.exec("ALTER TABLE products ADD COLUMN subcat TEXT"); } catch (e) {} // 직판 하위 카테고리
   try { db.exec("ALTER TABLE products ADD COLUMN brand TEXT"); } catch (e) {}  // 브랜드(3단계)
 
+  // 카테고리 개편(5분류 → 3분류) 이전 상품을 새 구조로 이관.
+  // 현재 CATEGORIES 에 없는 카테고리의 상품만 대상 — 럭셔리 목록에 있으면 이동, 아니면 숨김(active=0).
+  try {
+    const validIds = new Set(CATEGORIES.map((c) => c.id));
+    const LUX_SUB = {
+      "캐시미어 코트": "wear", "울 블레이저": "wear", "캐시미어 혼방 코트": "wear",
+      "레더 토트백": "bag", "미니 크로스백": "bag",
+      "페니 로퍼": "shoes", "더비 슈즈": "shoes", "화이트 스니커즈": "shoes", "청키 스니커즈": "shoes",
+      "실버 체인 목걸이": "acc", "골드 브레이슬릿": "acc", "실버 미니 목걸이": "acc",
+    };
+    const stale = db
+      .prepare("SELECT id, title, category FROM products WHERE active=1 AND category IS NOT NULL")
+      .all()
+      .filter((p) => !validIds.has(p.category));
+    if (stale.length) {
+      const move = db.prepare("UPDATE products SET category='luxury', subcat=? WHERE id=?");
+      const hide = db.prepare("UPDATE products SET active=0 WHERE id=?");
+      let moved = 0, hidden = 0;
+      for (const p of stale) {
+        const sub = LUX_SUB[p.title];
+        if (sub) { move.run(sub, p.id); moved++; } else { hide.run(p.id); hidden++; }
+      }
+      console.log(`♻️  옛 카테고리 상품 정리 — 럭셔리로 이동 ${moved}건, 숨김 ${hidden}건`);
+    }
+  } catch (e) {}
+
   // 럭셔리 브랜드 도입 전에 등록된 상품에 브랜드 채우기 (비어있는 것만)
   try {
     const fix = [
