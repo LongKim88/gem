@@ -30,15 +30,11 @@
   }
   function icon(cat) { return (state.catMap[cat] && state.catMap[cat].icon) || "🛍️"; }
   function catName(cat) { return (state.catMap[cat] && state.catMap[cat].name) || cat || ""; }
-  function subName(cat, sub) {
+  /* 카테고리의 subcats/brands 에서 id → 표시 이름 */
+  function optName(cat, key, id) {
     const c = state.catMap[cat];
-    const s2 = c && (c.subcats || []).find((x) => x.id === sub);
-    return s2 ? s2.name : sub || "";
-  }
-  function brandName(cat, brand) {
-    const c = state.catMap[cat];
-    const b = c && (c.brands || []).find((x) => x.id === brand);
-    return b ? b.name : brand || "";
+    const o = c && (c[key] || []).find((x) => x.id === id);
+    return o ? o.name : id || "";
   }
   /* 상품을 걸 수 있는 카테고리 (구매대행처럼 상담만 하는 칸은 제외) */
   function catalogCats() {
@@ -118,10 +114,6 @@
           </div>
           <button class="btn-primary" id="lg-btn">로그인</button>
           <div class="err-msg" id="lg-err"></div>
-          <div class="hint">
-            데모 계정 — 가게: <b>greenfair</b> / shop1234<br/>
-            플랫폼(본사): <b>jem</b> / jem1234
-          </div>
         </div>
       </div>`;
     const btn = document.getElementById("lg-btn");
@@ -181,11 +173,13 @@
     });
   }
 
+  const PW_TAB = { id: "password", icon: "🔑", label: "비밀번호" };
   const SHOP_TABS = [
     { id: "products", icon: "📦", label: "내 상품" },
     { id: "feed", icon: "🛒", label: "B2B 피드" },
     { id: "orders", icon: "🧾", label: "주문" },
     { id: "profile", icon: "⚙️", label: "내 정보" },
+    PW_TAB,
   ];
   const PLAT_TABS = [
     { id: "supply", icon: "📦", label: "공급 상품" },
@@ -193,6 +187,7 @@
     { id: "shops", icon: "🏪", label: "가게" },
     { id: "orders", icon: "🧾", label: "주문" },
     { id: "issue", icon: "➕", label: "계정발급" },
+    PW_TAB,
   ];
 
   function onTab(tab) {
@@ -205,6 +200,7 @@
     if (state.tab === "products") loadProducts();
     else if (state.tab === "feed") loadFeed();
     else if (state.tab === "profile") loadProfile();
+    else if (state.tab === "password") renderPassword();
     else loadOrders();
   }
 
@@ -218,11 +214,10 @@
     const isOfficial = state.me.role === "official";   // 직영 스토어 = 한도 없음 + 카테고리 직접 지정
     const unlimited = limit == null;
     const full = !unlimited && count >= limit;
-    const pct = unlimited ? 0 : Math.min(100, Math.round((count / limit) * 100));
 
     const list = products.length
       ? products.map((p) => {
-        const place = [catName(p.category), subName(p.category, p.subcat), brandName(p.category, p.brand)]
+        const place = [catName(p.category), optName(p.category, "subcats", p.subcat), optName(p.category, "brands", p.brand)]
           .filter(Boolean).join(" › ");
         return `
         <div class="p-item">
@@ -248,7 +243,7 @@
               <b>업로드 한도</b>
               <span class="count"><span class="used">${count}</span> / ${limit}</span>
             </div>
-            <div class="bar ${full ? "full" : ""}"><span style="width:${pct}%"></span></div>
+            <div class="bar ${full ? "full" : ""}"><span style="width:${Math.min(100, Math.round((count / limit) * 100))}%"></span></div>
             ${full
               ? `<div class="limit-note locked">⚠️ 무료 한도(${limit}개)를 모두 사용했습니다. 추가 업로드는 추후 <b>유료 플랜</b>으로 제공될 예정입니다.</div>`
               : `<div class="limit-note">기본 ${limit}개까지 무료로 등록할 수 있습니다. (남은 슬롯 ${limit - count}개)</div>`}
@@ -367,6 +362,47 @@
         }
       };
     }
+  }
+
+  /* ---------- 비밀번호 변경 (모든 역할 공통) ---------- */
+  function renderPassword() {
+    const c = document.getElementById("a-content");
+    c.innerHTML = `
+      <div class="card">
+        <h2 class="sec">🔑 비밀번호 변경</h2>
+        <form id="pw-form">
+          <div class="field">
+            <label>현재 비밀번호</label>
+            <input name="current" type="password" autocomplete="current-password" />
+          </div>
+          <div class="field">
+            <label>새 비밀번호 (8자 이상)</label>
+            <input name="next" type="password" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label>새 비밀번호 확인</label>
+            <input name="confirm" type="password" autocomplete="new-password" />
+          </div>
+          <button class="btn-primary" type="submit">변경</button>
+          <div class="err-msg" id="pw-err"></div>
+        </form>
+      </div>`;
+
+    const form = document.getElementById("pw-form");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("pw-err");
+      errEl.textContent = "";
+      const fd = new FormData(form);
+      const next = String(fd.get("next") || "");
+      if (next.length < 8) { errEl.textContent = "새 비밀번호는 8자 이상이어야 합니다."; return; }
+      if (next !== String(fd.get("confirm") || "")) { errEl.textContent = "새 비밀번호가 서로 다릅니다."; return; }
+      try {
+        await jsend("/api/auth/password", "PATCH", { current: String(fd.get("current") || ""), next });
+        toast("비밀번호가 변경되었습니다 ✅");
+        form.reset();
+      } catch (e2) { errEl.textContent = e2.message; }
+    };
   }
 
   /* ---------- B2B 피드 ---------- */
@@ -573,6 +609,7 @@
     else if (state.ptab === "settle") loadSettlement();
     else if (state.ptab === "shops") loadPShops();
     else if (state.ptab === "orders") loadPOrders();
+    else if (state.ptab === "password") renderPassword();
     else renderIssue();
   }
 

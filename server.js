@@ -208,6 +208,17 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ id: s.id, name: s.name, role: s.role, category: s.category, username: s.username });
 });
 
+// 비밀번호 변경 — 역할 무관, 로그인한 본인 계정
+app.patch("/api/auth/password", requireAuth, (req, res) => {
+  const { current, next } = req.body || {};
+  if (!bcrypt.compareSync(String(current || ""), req.shop.password_hash))
+    return res.status(401).json({ error: "현재 비밀번호가 올바르지 않습니다." });
+  if (String(next || "").length < 8)
+    return res.status(400).json({ error: "새 비밀번호는 8자 이상이어야 합니다." });
+  db.prepare("UPDATE shops SET password_hash=? WHERE id=?").run(bcrypt.hashSync(String(next), 10), req.shop.id);
+  res.json({ ok: true });
+});
+
 app.post("/api/auth/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
