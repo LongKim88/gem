@@ -30,6 +30,20 @@
   }
   function icon(cat) { return (state.catMap[cat] && state.catMap[cat].icon) || "🛍️"; }
   function catName(cat) { return (state.catMap[cat] && state.catMap[cat].name) || cat || ""; }
+  function subName(cat, sub) {
+    const c = state.catMap[cat];
+    const s2 = c && (c.subcats || []).find((x) => x.id === sub);
+    return s2 ? s2.name : sub || "";
+  }
+  function brandName(cat, brand) {
+    const c = state.catMap[cat];
+    const b = c && (c.brands || []).find((x) => x.id === brand);
+    return b ? b.name : brand || "";
+  }
+  /* 상품을 걸 수 있는 카테고리 (구매대행처럼 상담만 하는 칸은 제외) */
+  function catalogCats() {
+    return state.cats.filter((c) => c.mode === "direct" && !c.consult);
+  }
   function ph(iconStr) { return `<div class="ph">${esc(iconStr)}</div>`; }
   function imgOr(url, iconStr, alt) {
     if (url && String(url).trim())
@@ -201,35 +215,68 @@
     try { data = await jget("/api/my/products"); }
     catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     const { products, limit, count } = data;
-    const full = count >= limit;
-    const pct = Math.min(100, Math.round((count / limit) * 100));
+    const isOfficial = state.me.role === "official";   // 직영 스토어 = 한도 없음 + 카테고리 직접 지정
+    const unlimited = limit == null;
+    const full = !unlimited && count >= limit;
+    const pct = unlimited ? 0 : Math.min(100, Math.round((count / limit) * 100));
 
     const list = products.length
-      ? products.map((p) => `
+      ? products.map((p) => {
+        const place = [catName(p.category), subName(p.category, p.subcat), brandName(p.category, p.brand)]
+          .filter(Boolean).join(" › ");
+        return `
         <div class="p-item">
-          <div class="p-thumb">${imgOr(p.thumb || p.image, icon(state.me.category), p.title)}</div>
+          <div class="p-thumb">${imgOr(p.thumb || p.image, icon(p.category || state.me.category), p.title)}</div>
           <div class="p-main">
             <div class="t"><span class="badge ${p.kind}">${KIND_LABEL[p.kind] || ""}</span>${esc(p.title)}</div>
+            ${place ? `<div class="m">${esc(place)}</div>` : ""}
             <div class="m">${esc(p.description || "")}</div>
           </div>
           <div class="p-price">${esc(p.price || "문의")}</div>
           <button class="icon-btn" data-action="del-product" data-id="${p.id}" title="삭제">🗑️</button>
-        </div>`).join("")
+        </div>`;
+      }).join("")
       : `<div class="empty" style="padding:24px 0">아직 등록한 상품이 없습니다.</div>`;
 
-    c.innerHTML = `
-      <div class="card">
-        <div class="limit-meter">
-          <div class="row">
-            <b>업로드 한도</b>
-            <span class="count"><span class="used">${count}</span> / ${limit}</span>
+    const limitCard = unlimited
+      ? `<div class="card">
+          <div class="limit-note">📦 <b>직영 스토어</b> — 업로드 한도 없이 등록할 수 있습니다. 여기 올린 상품이 <b>고객 화면에 바로 노출</b>됩니다. (현재 ${count}개)</div>
+        </div>`
+      : `<div class="card">
+          <div class="limit-meter">
+            <div class="row">
+              <b>업로드 한도</b>
+              <span class="count"><span class="used">${count}</span> / ${limit}</span>
+            </div>
+            <div class="bar ${full ? "full" : ""}"><span style="width:${pct}%"></span></div>
+            ${full
+              ? `<div class="limit-note locked">⚠️ 무료 한도(${limit}개)를 모두 사용했습니다. 추가 업로드는 추후 <b>유료 플랜</b>으로 제공될 예정입니다.</div>`
+              : `<div class="limit-note">기본 ${limit}개까지 무료로 등록할 수 있습니다. (남은 슬롯 ${limit - count}개)</div>`}
           </div>
-          <div class="bar ${full ? "full" : ""}"><span style="width:${pct}%"></span></div>
-          ${full
-            ? `<div class="limit-note locked">⚠️ 무료 한도(${limit}개)를 모두 사용했습니다. 추가 업로드는 추후 <b>유료 플랜</b>으로 제공될 예정입니다.</div>`
-            : `<div class="limit-note">기본 ${limit}개까지 무료로 등록할 수 있습니다. (남은 슬롯 ${limit - count}개)</div>`}
+        </div>`;
+
+    // 직영 계정만: 상품이 걸릴 위치(카테고리 › 하위분류 › 브랜드)를 직접 고른다
+    const placeFields = isOfficial
+      ? `<div class="row-2">
+          <div class="field">
+            <label>카테고리 *</label>
+            <select name="category" id="up-cat">
+              ${catalogCats().map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>하위분류 *</label>
+            <select name="subcat" id="up-sub"></select>
+          </div>
         </div>
-      </div>
+        <div class="field">
+          <label>브랜드 (선택)</label>
+          <select name="brand" id="up-brand"></select>
+        </div>`
+      : "";
+
+    c.innerHTML = `
+      ${limitCard}
 
       <div class="card">
         <h2 class="sec">＋ 상품 등록</h2>
@@ -238,6 +285,7 @@
             <label>상품명 *</label>
             <input name="title" type="text" placeholder="예: 오버핏 니트 가디건" ${full ? "disabled" : ""} />
           </div>
+          ${placeFields}
           <div class="row-2">
             <div class="field">
               <label>가격</label>
@@ -269,6 +317,18 @@
         ${list}
       </div>`;
 
+    // 카테고리를 고르면 그에 속한 하위분류·브랜드만 남긴다
+    const catSel = document.getElementById("up-cat");
+    function fillPlace() {
+      const cat = state.catMap[catSel.value] || {};
+      document.getElementById("up-sub").innerHTML =
+        (cat.subcats || []).map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+      document.getElementById("up-brand").innerHTML =
+        `<option value="">선택 안 함</option>` +
+        (cat.brands || []).map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+    }
+    if (catSel) { fillPlace(); catSel.onchange = fillPlace; }
+
     // 삭제
     c.querySelectorAll('[data-action="del-product"]').forEach((b) => {
       b.onclick = async () => {
@@ -291,6 +351,9 @@
         errEl.textContent = "";
         const fd = new FormData(form);
         if (!String(fd.get("title") || "").trim()) { errEl.textContent = "상품명을 입력하세요."; return; }
+        if (isOfficial && !String(fd.get("subcat") || "").trim()) {
+          errEl.textContent = "카테고리와 하위분류를 선택하세요."; return;
+        }
         const btn = form.querySelector('button[type="submit"]');
         btn.disabled = true; btn.textContent = "등록 중…";
         try {

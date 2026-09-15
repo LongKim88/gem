@@ -115,8 +115,9 @@ function requireAuth(req, res, next) {
 }
 function requireShop(req, res, next) {
   requireAuth(req, res, () => {
-    if (req.shop.role !== "shop")
-      return res.status(403).json({ error: "가게 계정만 사용할 수 있습니다.", code: "ROLE" });
+    // 'official'(직영 스토어) = 우리가 직접 파는 상품의 주인. 'shop' = 추후 입점 가게.
+    if (req.shop.role !== "shop" && req.shop.role !== "official")
+      return res.status(403).json({ error: "가게 또는 직영 계정만 사용할 수 있습니다.", code: "ROLE" });
     next();
   });
 }
@@ -129,6 +130,15 @@ function requirePlatform(req, res, next) {
 }
 function activeProductCount(shopId) {
   return db.prepare("SELECT COUNT(*) AS n FROM products WHERE shop_id = ? AND active = 1").get(shopId).n;
+}
+/* 업로드 한도 — 직영 스토어는 우리 물건이므로 무제한(null). 입점 가게만 한도 적용. */
+function productLimit(shop) {
+  return shop.role === "official" ? null : shop.product_limit;
+}
+/* 상품을 걸 수 있는 카테고리인지 (직판 + 상담 전용 제외) */
+function catalogCat(catId) {
+  const c = CATEGORIES.find((x) => x.id === catId);
+  return c && c.mode === "direct" && !c.consult ? c : null;
 }
 
 /* =======================================================================
@@ -251,19 +261,20 @@ app.get("/api/my/products", requireShop, (req, res) => {
     .all(req.shop.id);
   res.json({
     products: rows,
-    limit: req.shop.product_limit,
+    limit: productLimit(req.shop),
     count: rows.length,
   });
 });
 
-// 상품 업로드 (이미지 선택) — 10개 초과 시 잠금(향후 과금)
+// 상품 업로드 (이미지 선택) — 입점 가게만 한도 적용, 직영은 무제한
 app.post("/api/my/products", requireShop, upload.single("image"), async (req, res) => {
+  const limit = productLimit(req.shop);
   const count = activeProductCount(req.shop.id);
-  if (count >= req.shop.product_limit) {
+  if (limit !== null && count >= limit) {
     return res.status(402).json({
-      error: `무료 업로드 한도(${req.shop.product_limit}개)를 초과했습니다. 추가 업로드는 추후 유료 플랜으로 제공될 예정입니다.`,
+      error: `무료 업로드 한도(${limit}개)를 초과했습니다. 추가 업로드는 추후 유료 플랜으로 제공될 예정입니다.`,
       code: "LIMIT",
-      limit: req.shop.product_limit,
+      limit,
     });
   }
   const { title, description, price } = req.body || {};
@@ -271,6 +282,27 @@ app.post("/api/my/products", requireShop, upload.single("image"), async (req, re
   if (!title || !String(title).trim())
     return res.status(400).json({ error: "상품명을 입력하세요." });
   kind = kind === "signature" ? "signature" : "new";
+
+  // 직영 상품은 고객 화면의 어느 칸에 걸릴지를 직접 정한다.
+  // (입점 가게 상품은 지금처럼 가게 카테고리를 그대로 따라가므로 NULL 유지)
+  let category = null, subcat = null, brand = null;
+  if (req.shop.role === "official") {
+    const cat = catalogCat(String(req.body.category || "").trim());
+    if (!cat) return res.status(400).json({ error: "카테고리를 선택하세요." });
+    category = cat.id;
+
+    const sc = String(req.body.subcat || "").trim();
+    if (!(cat.subcats || []).some((x) => x.id === sc))
+      return res.status(400).json({ error: "하위분류를 선택하세요." });
+    subcat = sc;
+
+    const br = String(req.body.brand || "").trim();
+    if (br) {
+      if (!(cat.brands || []).some((x) => x.id === br))
+        return res.status(400).json({ error: "브랜드 값이 올바르지 않습니다." });
+      brand = br;
+    }
+  }
 
   // 이미지: 업로드 파일이 있으면 리사이즈·압축(WebP) + 썸네일 생성, 없으면 URL 사용
   let image = req.body.imageUrl || null;
@@ -286,10 +318,10 @@ app.post("/api/my/products", requireShop, upload.single("image"), async (req, re
   }
 
   const info = db
-    .prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, kind) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(req.shop.id, String(title).trim(), description || null, price || null, image, thumb, kind);
+    .prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, kind, category, subcat, brand) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(req.shop.id, String(title).trim(), description || null, price || null, image, thumb, kind, category, subcat, brand);
   const product = db.prepare("SELECT * FROM products WHERE id=?").get(Number(info.lastInsertRowid));
-  res.status(201).json({ product, count: count + 1, limit: req.shop.product_limit });
+  res.status(201).json({ product, count: count + 1, limit });
 });
 
 app.delete("/api/my/products/:id", requireShop, (req, res) => {
