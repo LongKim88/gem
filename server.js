@@ -206,6 +206,22 @@ app.get("/api/direct/:catId/products", (req, res) => {
   res.json({ products: rows, store: store || null });
 });
 
+// 상품 상세 — 링크 공유용. 직영 스토어의 노출 중인 상품만.
+app.get("/api/products/:id", (req, res) => {
+  const p = db
+    .prepare(
+      `SELECT p.id, p.title, p.description, p.price, p.image, p.thumb, p.category, p.subcat, p.brand
+       FROM products p JOIN shops s ON s.id = p.shop_id
+       WHERE p.id=? AND s.role='official' AND s.active=1 AND p.active=1`
+    )
+    .get(req.params.id);
+  if (!p) return res.status(404).json({ error: "상품을 찾을 수 없습니다." });
+  const store =
+    db.prepare("SELECT name, kakao, phone FROM shops WHERE role='official' AND category=? AND active=1 LIMIT 1").get(p.category) ||
+    db.prepare("SELECT name, kakao, phone FROM shops WHERE role='official' AND active=1 ORDER BY id LIMIT 1").get();
+  res.json({ product: p, store: store || null });
+});
+
 /* =======================================================================
    인증
    ======================================================================= */

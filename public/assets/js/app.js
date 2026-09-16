@@ -276,7 +276,7 @@
 
     const grid = items.length
       ? `<div class="prod-grid">${items.map((p) => `
-          <div class="prod-card">
+          <div class="prod-card" onclick="location.hash='#/p/${p.id}'">
             <div class="prod-thumb">${imgOrPlaceholder(p.thumb || p.image, icon, p.title)}</div>
             <div class="prod-body">
               ${p.brand && brandName(p.brand) ? `<div class="prod-brand">${esc(brandName(p.brand))}</div>` : ""}
@@ -415,11 +415,64 @@
     } else { input.select(); document.execCommand("copy"); done(); }
   };
 
+  /* ---------- 화면 3: 상품 상세 ---------- */
+  async function renderProduct(id) {
+    loading();
+    await ensureCats();
+    let d;
+    try { d = await api("/api/products/" + encodeURIComponent(id)); }
+    catch (e) {
+      app.innerHTML = `<div class="view"><div class="empty">상품을 찾을 수 없습니다.</div></div>`;
+      return;
+    }
+    const p = d.product;
+    const store = d.store || {};
+    const cat = catMap[p.category] || {};
+    const sub = (cat.subcats || []).find((x) => x.id === p.subcat) || {};
+    const brand = (cat.brands || []).find((x) => x.id === p.brand) || {};
+    const kakao = real(store.kakao);
+    const phone = real(store.phone);
+    // 뒤로: 온 경로가 있으면 그 목록으로, 없으면 홈
+    const back = p.category
+      ? "#/cat/" + p.category + (p.subcat ? "/" + p.subcat + (p.brand ? "/" + p.brand : "") : "")
+      : "#/";
+
+    app.innerHTML = `
+      <div class="view detail">
+        ${topbar(brand.name || sub.name || cat.name || "상품", [cat.name, sub.name].filter(Boolean).join(" · "), back)}
+
+        <div class="p-hero">${imgOrPlaceholder(p.image || p.thumb, cat.icon || "🛍️", p.title)}</div>
+
+        <section class="section p-info">
+          ${brand.name ? `<div class="prod-brand">${esc(brand.name)}</div>` : ""}
+          <h1 class="p-name">${esc(p.title)}</h1>
+          <div class="p-price">${esc(p.price || "문의")}</div>
+          ${p.description ? `<p class="p-desc">${esc(p.description)}</p>` : ""}
+        </section>
+
+        <section class="section">
+          <div class="p-meta">
+            ${[["카테고리", cat.name], ["분류", sub.name], ["브랜드", brand.name]]
+              .filter(([, v]) => v)
+              .map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}
+          </div>
+        </section>
+
+        <div class="book-bar">
+          ${contactBtn("kakao", kakao, "💬 이 상품 문의")}
+          ${phone ? `<a class="phone" href="tel:${esc(phone)}">📞 전화</a>` : ""}
+        </div>
+        <div class="footer">© 베플리카 · 직영 판매 상품</div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
   /* ---------- 라우터 ---------- */
   function route() {
     const hash = location.hash || "#/";
     const parts = hash.replace(/^#\//, "").split("/").filter(Boolean);
     if (parts[0] === "cat" && parts[1]) return renderCategory(parts[1], parts[2], parts[3]);
+    if (parts[0] === "p" && parts[1]) return renderProduct(parts[1]);
     if (parts[0] === "shop" && parts[1]) return renderShop(parts[1]);
     return renderHome();
   }

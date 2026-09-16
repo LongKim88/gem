@@ -579,3 +579,24 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 10.5px; font-weight: 800; color: var(--gold);
   letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 3px;
 }
+
+/* ---------- 상품 상세 ---------- */
+.p-hero {
+  aspect-ratio: 1/1; background: var(--card-2);
+  border-bottom: 1px solid var(--line); overflow: hidden;
+}
+.p-hero img, .p-hero .ph { width: 100%; height: 100%; object-fit: cover; }
+.p-hero .ph { display: grid; place-items: center; font-size: 64px; }
+
+.p-info { padding-top: 16px; }
+.p-name { margin: 4px 0 0; font-size: 20px; font-weight: 800; color: var(--ink); line-height: 1.35; }
+.p-price { margin-top: 8px; color: var(--gold); font-weight: 900; font-size: 22px; }
+.p-desc { margin: 12px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.75; white-space: pre-wrap; }
+
+.p-meta { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.p-meta > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; background: var(--card); font-size: 13.5px; }
+.p-meta span { color: var(--muted); }
+.p-meta b { color: var(--ink); font-weight: 700; }
+
+.prod-card { cursor: pointer; }
+.prod-card:active { filter: brightness(0.93); }
