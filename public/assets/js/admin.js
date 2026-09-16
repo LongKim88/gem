@@ -15,6 +15,7 @@
     ordersSub: "received",     // sent | received
     feed: { category: "", kind: "", today: false },
     ptab: "supply",            // 플랫폼: supply | settle | shops | orders | issue
+    editing: null,             // 수정 중인 상품 id (null = 신규 등록)
     supplyGroup: "day",        // 공급 상품 구분: day | week | month
     settle: { status: "", period: "all" }, // 정산 필터
   };
@@ -62,8 +63,8 @@
     if (!r.ok) throw Object.assign(new Error((d && d.error) || "오류 " + r.status), { code: d && d.code });
     return d;
   }
-  async function jform(url, formData) {
-    const r = await fetch(url, { method: "POST", body: formData });
+  async function jform(url, formData, method) {
+    const r = await fetch(url, { method: method || "POST", body: formData });
     const d = await r.json().catch(() => null);
     if (!r.ok) throw Object.assign(new Error((d && d.error) || "오류 " + r.status), { code: d && d.code });
     return d;
@@ -212,6 +213,8 @@
     catch (e) { c.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     const { products, limit, count } = data;
     const isOfficial = state.me.role === "official";   // 직영 스토어 = 한도 없음 + 카테고리 직접 지정
+    const edit = products.find((x) => x.id === state.editing) || null;
+    if (state.editing && !edit) state.editing = null;   // 삭제된 상품을 수정 중이었으면 신규 모드로
     const unlimited = limit == null;
     const full = !unlimited && count >= limit;
 
@@ -228,6 +231,7 @@
             <div class="m">${esc(p.description || "")}</div>
           </div>
           <div class="p-price">${esc(p.price || "문의")}</div>
+          <button class="icon-btn" data-action="edit-product" data-id="${p.id}" title="수정">✏️</button>
           <button class="icon-btn" data-action="del-product" data-id="${p.id}" title="삭제">🗑️</button>
         </div>`;
       }).join("")
@@ -274,7 +278,7 @@
       ${limitCard}
 
       <div class="card">
-        <h2 class="sec">＋ 상품 등록</h2>
+        <h2 class="sec">${edit ? "✏️ 상품 수정" : "＋ 상품 등록"}</h2>
         <form id="up-form">
           <div class="field">
             <label>상품명 *</label>
@@ -299,10 +303,11 @@
             <input name="description" type="text" placeholder="예: 가을 신상 · 4color" ${full ? "disabled" : ""} />
           </div>
           <div class="field">
-            <label>사진 (선택)</label>
-            <input name="image" type="file" accept="image/*" ${full ? "disabled" : ""} />
+            <label>사진 ${edit ? "(바꿀 때만 선택 — 비워두면 기존 사진 유지)" : "(선택)"}</label>
+            <input name="image" type="file" accept="image/*" ${full && !edit ? "disabled" : ""} />
           </div>
-          <button class="btn-primary" type="submit" ${full ? "disabled" : ""}>${full ? "한도 초과 — 업로드 불가" : "상품 등록"}</button>
+          <button class="btn-primary" type="submit" ${full && !edit ? "disabled" : ""}>${edit ? "수정 저장" : full ? "한도 초과 — 업로드 불가" : "상품 등록"}</button>
+          ${edit ? `<button class="btn-ghost" type="button" id="up-cancel">취소</button>` : ""}
           <div class="err-msg" id="up-err"></div>
         </form>
       </div>
@@ -324,6 +329,24 @@
     }
     if (catSel) { fillPlace(); catSel.onchange = fillPlace; }
 
+    // 수정 모드: 기존 값으로 폼을 채운다 (하위분류·브랜드는 fillPlace 뒤여야 선택됨)
+    const form = document.getElementById("up-form");
+    if (edit) {
+      form.title.value = edit.title || "";
+      form.price.value = edit.price || "";
+      form.description.value = edit.description || "";
+      form.kind.value = edit.kind || "new";
+      if (catSel && edit.category) { catSel.value = edit.category; fillPlace(); }
+      if (form.subcat) form.subcat.value = edit.subcat || "";
+      if (form.brand) form.brand.value = edit.brand || "";
+      document.getElementById("up-cancel").onclick = () => { state.editing = null; loadProducts(); };
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    c.querySelectorAll('[data-action="edit-product"]').forEach((b) => {
+      b.onclick = () => { state.editing = Number(b.getAttribute("data-id")); loadProducts(); };
+    });
+
     // 삭제
     c.querySelectorAll('[data-action="del-product"]').forEach((b) => {
       b.onclick = async () => {
@@ -337,9 +360,8 @@
       };
     });
 
-    // 업로드
-    const form = document.getElementById("up-form");
-    if (form && !full) {
+    // 등록 / 수정 저장
+    if (form && (edit || !full)) {
       form.onsubmit = async (e) => {
         e.preventDefault();
         const errEl = document.getElementById("up-err");
@@ -350,14 +372,16 @@
           errEl.textContent = "카테고리와 하위분류를 선택하세요."; return;
         }
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true; btn.textContent = "등록 중…";
+        btn.disabled = true; btn.textContent = "저장 중…";
         try {
-          await jform("/api/my/products", fd);
-          toast("상품이 등록되었습니다 ✅");
+          if (edit) await jform("/api/my/products/" + edit.id, fd, "PATCH");
+          else await jform("/api/my/products", fd);
+          toast(edit ? "수정되었습니다 ✅" : "상품이 등록되었습니다 ✅");
+          state.editing = null;
           loadProducts();
         } catch (e2) {
           errEl.textContent = e2.message;
-          btn.disabled = false; btn.textContent = "상품 등록";
+          btn.disabled = false; btn.textContent = edit ? "수정 저장" : "상품 등록";
           if (e2.code === "LIMIT") loadProducts();
         }
       };

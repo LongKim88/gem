@@ -135,6 +135,18 @@ function activeProductCount(shopId) {
 function productLimit(shop) {
   return shop.role === "official" ? null : shop.product_limit;
 }
+/* 직영 상품이 고객 화면의 어느 칸에 걸릴지 — 잘못된 값이면 throw.
+   입점 가게 상품은 가게 카테고리를 그대로 따라가므로 전부 NULL. */
+function productPlace(req) {
+  if (req.shop.role !== "official") return { category: null, subcat: null, brand: null };
+  const cat = catalogCat(String(req.body.category || "").trim());
+  if (!cat) throw new Error("카테고리를 선택하세요.");
+  const subcat = String(req.body.subcat || "").trim();
+  if (!(cat.subcats || []).some((x) => x.id === subcat)) throw new Error("하위분류를 선택하세요.");
+  const brand = String(req.body.brand || "").trim();
+  if (brand && !(cat.brands || []).some((x) => x.id === brand)) throw new Error("브랜드 값이 올바르지 않습니다.");
+  return { category: cat.id, subcat, brand: brand || null };
+}
 /* 상품을 걸 수 있는 카테고리인지 (직판 + 상담 전용 제외) */
 function catalogCat(catId) {
   const c = CATEGORIES.find((x) => x.id === catId);
@@ -294,26 +306,10 @@ app.post("/api/my/products", requireShop, upload.single("image"), async (req, re
     return res.status(400).json({ error: "상품명을 입력하세요." });
   kind = kind === "signature" ? "signature" : "new";
 
-  // 직영 상품은 고객 화면의 어느 칸에 걸릴지를 직접 정한다.
-  // (입점 가게 상품은 지금처럼 가게 카테고리를 그대로 따라가므로 NULL 유지)
-  let category = null, subcat = null, brand = null;
-  if (req.shop.role === "official") {
-    const cat = catalogCat(String(req.body.category || "").trim());
-    if (!cat) return res.status(400).json({ error: "카테고리를 선택하세요." });
-    category = cat.id;
-
-    const sc = String(req.body.subcat || "").trim();
-    if (!(cat.subcats || []).some((x) => x.id === sc))
-      return res.status(400).json({ error: "하위분류를 선택하세요." });
-    subcat = sc;
-
-    const br = String(req.body.brand || "").trim();
-    if (br) {
-      if (!(cat.brands || []).some((x) => x.id === br))
-        return res.status(400).json({ error: "브랜드 값이 올바르지 않습니다." });
-      brand = br;
-    }
-  }
+  let place;
+  try { place = productPlace(req); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  const { category, subcat, brand } = place;
 
   // 이미지: 업로드 파일이 있으면 리사이즈·압축(WebP) + 썸네일 생성, 없으면 URL 사용
   let image = req.body.imageUrl || null;
@@ -333,6 +329,38 @@ app.post("/api/my/products", requireShop, upload.single("image"), async (req, re
     .run(req.shop.id, String(title).trim(), description || null, price || null, image, thumb, kind, category, subcat, brand);
   const product = db.prepare("SELECT * FROM products WHERE id=?").get(Number(info.lastInsertRowid));
   res.status(201).json({ product, count: count + 1, limit });
+});
+
+// 상품 수정 — 사진은 새로 올릴 때만 교체, 안 올리면 기존 사진 유지
+app.patch("/api/my/products/:id", requireShop, upload.single("image"), async (req, res) => {
+  const p = db.prepare("SELECT * FROM products WHERE id=? AND shop_id=? AND active=1").get(req.params.id, req.shop.id);
+  if (!p) return res.status(404).json({ error: "상품을 찾을 수 없습니다." });
+
+  const { title, description, price } = req.body || {};
+  if (!title || !String(title).trim())
+    return res.status(400).json({ error: "상품명을 입력하세요." });
+  const kind = req.body.kind === "signature" ? "signature" : "new";
+
+  let place;
+  try { place = productPlace(req); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+
+  let { image, thumb } = p;
+  if (req.file) {
+    try {
+      const out = await processImage(req.file.buffer);
+      image = out.image;
+      thumb = out.thumb;
+    } catch (e) {
+      return res.status(400).json({ error: "이미지 처리 중 오류: " + e.message });
+    }
+  }
+
+  db.prepare(
+    "UPDATE products SET title=?, description=?, price=?, image=?, thumb=?, kind=?, category=?, subcat=?, brand=? WHERE id=?"
+  ).run(String(title).trim(), description || null, price || null, image, thumb, kind,
+        place.category, place.subcat, place.brand, p.id);
+  res.json({ product: db.prepare("SELECT * FROM products WHERE id=?").get(p.id) });
 });
 
 app.delete("/api/my/products/:id", requireShop, (req, res) => {
