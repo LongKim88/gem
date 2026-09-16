@@ -23,6 +23,7 @@ reseedIfStale(); // 카테고리 개편으로 옛 데모 데이터만 남았으�
 const app = express();
 const PORT = process.env.PORT || 4600;
 app.set("trust proxy", 1); // Render/프록시 뒤 HTTPS 인식
+app.disable("x-powered-by");
 
 // 업로드 저장 위치: 배포 환경 영구 디스크(DATA_DIR)/uploads, 로컬은 프로젝트 uploads/
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
@@ -37,7 +38,7 @@ app.use(
     secret: process.env.SESSION_SECRET || "jem-dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: "lax", maxAge: 1000 * 60 * 60 * 24 * 7 },
+    cookie: { httpOnly: true, sameSite: "lax", secure: "auto", maxAge: 1000 * 60 * 60 * 24 * 7 },
   })
 );
 
@@ -241,13 +242,48 @@ app.get("/api/products/:id", (req, res) => {
 /* =======================================================================
    인증
    ======================================================================= */
+/* 로그인 시도 제한 — 아이디+IP 조합으로 5회 실패 시 10분 잠금.
+   ponytail: 단일 인스턴스 전제의 메모리 카운터. 서버를 여러 대로 늘리면 공유 저장소로. */
+const LOGIN_MAX = 5;
+const LOGIN_LOCK_MS = 10 * 60 * 1000;
+const loginFails = new Map();
+function loginKey(req, username) {
+  return String(username).trim().toLowerCase() + "|" + req.ip;
+}
+function loginLockedFor(key) {
+  const f = loginFails.get(key);
+  if (!f) return 0;
+  if (Date.now() > f.until) { loginFails.delete(key); return 0; }
+  return f.n >= LOGIN_MAX ? f.until - Date.now() : 0;
+}
+function noteLoginFail(key) {
+  const f = loginFails.get(key);
+  const n = f && Date.now() <= f.until ? f.n + 1 : 1;
+  loginFails.set(key, { n, until: Date.now() + LOGIN_LOCK_MS });
+  // 오래된 항목 정리 (메모리 누수 방지)
+  if (loginFails.size > 1000)
+    for (const [k, v] of loginFails) if (Date.now() > v.until) loginFails.delete(k);
+}
+
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password)
     return res.status(400).json({ error: "아이디와 비밀번호를 입력하세요." });
+
+  const key = loginKey(req, username);
+  const left = loginLockedFor(key);
+  if (left > 0)
+    return res.status(429).json({
+      error: `로그인 시도가 너무 많습니다. ${Math.ceil(left / 60000)}분 후 다시 시도하세요.`,
+      code: "LOCKED",
+    });
+
   const s = db.prepare("SELECT * FROM shops WHERE username=? AND active=1").get(String(username).trim());
-  if (!s || !bcrypt.compareSync(String(password), s.password_hash))
+  if (!s || !bcrypt.compareSync(String(password), s.password_hash)) {
+    noteLoginFail(key);
     return res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
+  }
+  loginFails.delete(key);
   req.session.shopId = s.id;
   res.json({ id: s.id, name: s.name, role: s.role, category: s.category, username: s.username });
 });
