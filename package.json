@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "seed": "node db.js --seed"
+    "seed": "node db.js --seed",
+    "locks": "node scripts/locks.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

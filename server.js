@@ -243,26 +243,37 @@ app.get("/api/products/:id", (req, res) => {
    인증
    ======================================================================= */
 /* 로그인 시도 제한 — 아이디+IP 조합으로 5회 실패 시 10분 잠금.
-   ponytail: 단일 인스턴스 전제의 메모리 카운터. 서버를 여러 대로 늘리면 공유 저장소로. */
+   상태는 login_locks 테이블에 있으므로 SQL 로 직접 조회·해제할 수 있다.
+     SELECT * FROM login_locks;                        -- 잠긴 계정 보기
+     DELETE FROM login_locks WHERE username='store';   -- 특정 계정 풀기 */
 const LOGIN_MAX = 5;
-const LOGIN_LOCK_MS = 10 * 60 * 1000;
-const loginFails = new Map();
+const LOGIN_LOCK = "+10 minutes";
+
 function loginKey(req, username) {
   return String(username).trim().toLowerCase() + "|" + req.ip;
 }
+/* 잠금이 걸려 있으면 남은 밀리초, 아니면 0 */
 function loginLockedFor(key) {
-  const f = loginFails.get(key);
-  if (!f) return 0;
-  if (Date.now() > f.until) { loginFails.delete(key); return 0; }
-  return f.n >= LOGIN_MAX ? f.until - Date.now() : 0;
+  const row = db
+    .prepare("SELECT fails, locked_until FROM login_locks WHERE key=? AND locked_until > datetime('now')")
+    .get(key);
+  if (!row || row.fails < LOGIN_MAX) return 0;
+  return Math.max(0, new Date(row.locked_until.replace(" ", "T") + "Z") - Date.now());
 }
-function noteLoginFail(key) {
-  const f = loginFails.get(key);
-  const n = f && Date.now() <= f.until ? f.n + 1 : 1;
-  loginFails.set(key, { n, until: Date.now() + LOGIN_LOCK_MS });
-  // 오래된 항목 정리 (메모리 누수 방지)
-  if (loginFails.size > 1000)
-    for (const [k, v] of loginFails) if (Date.now() > v.until) loginFails.delete(k);
+function noteLoginFail(req, key, username) {
+  // 유효기간이 지난 행은 카운트를 1부터 다시 시작 (INSERT ... ON CONFLICT 로 한 번에)
+  db.prepare(
+    `INSERT INTO login_locks (key, username, ip, fails, locked_until, updated_at)
+     VALUES (?, ?, ?, 1, datetime('now', ?), datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET
+       fails = CASE WHEN locked_until > datetime('now') THEN fails + 1 ELSE 1 END,
+       locked_until = datetime('now', ?),
+       updated_at = datetime('now')`
+  ).run(key, String(username).trim(), req.ip || "", LOGIN_LOCK, LOGIN_LOCK);
+  db.prepare("DELETE FROM login_locks WHERE locked_until <= datetime('now')").run();
+}
+function clearLoginFails(key) {
+  db.prepare("DELETE FROM login_locks WHERE key=?").run(key);
 }
 
 app.post("/api/auth/login", (req, res) => {
@@ -280,10 +291,10 @@ app.post("/api/auth/login", (req, res) => {
 
   const s = db.prepare("SELECT * FROM shops WHERE username=? AND active=1").get(String(username).trim());
   if (!s || !bcrypt.compareSync(String(password), s.password_hash)) {
-    noteLoginFail(key);
+    noteLoginFail(req, key, username);
     return res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
   }
-  loginFails.delete(key);
+  clearLoginFails(key);
   req.session.shopId = s.id;
   res.json({ id: s.id, name: s.name, role: s.role, category: s.category, username: s.username });
 });

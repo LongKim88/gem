@@ -129,6 +129,21 @@ function init() {
     );
   `);
 
+  // 로그인 시도 제한 — 메모리가 아닌 DB에 두어 직접 조회·해제할 수 있게 한다.
+  //   잠긴 계정 보기: SELECT * FROM login_locks;
+  //   특정 계정 풀기: DELETE FROM login_locks WHERE username='store';
+  //   전부 풀기:      DELETE FROM login_locks;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS login_locks (
+      key          TEXT PRIMARY KEY,                  -- 아이디|IP
+      username     TEXT NOT NULL,
+      ip           TEXT NOT NULL,
+      fails        INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT NOT NULL,                     -- 이 시각이 지나면 카운트·잠금 모두 무효
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // 기존 DB 대상 마이그레이션: 없으면 컬럼 추가 (있으면 무시)
   try { db.exec("ALTER TABLE products ADD COLUMN thumb TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE products ADD COLUMN category TEXT"); } catch (e) {}
