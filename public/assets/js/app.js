@@ -432,6 +432,8 @@
     const brand = (cat.brands || []).find((x) => x.id === p.brand) || {};
     const kakao = real(store.kakao);
     const phone = real(store.phone);
+    let blocks = [];
+    try { blocks = p.detail ? JSON.parse(p.detail) : []; } catch (e) {}
     // 뒤로: 온 경로가 있으면 그 목록으로, 없으면 홈
     const back = p.category
       ? "#/cat/" + p.category + (p.subcat ? "/" + p.subcat + (p.brand ? "/" + p.brand : "") : "")
@@ -449,6 +451,16 @@
           <div class="p-price">${esc(p.price || "문의")}</div>
           ${p.description ? `<p class="p-desc">${esc(p.description)}</p>` : ""}
         </section>
+
+        ${blocks.length ? `
+        <section class="section p-detail">
+          <h2>상품 상세</h2>
+          ${blocks.map((b) => `
+            <div class="p-block">
+              ${b.image ? `<img src="${esc(b.image)}" alt="" loading="lazy" decoding="async" />` : ""}
+              ${b.text ? `<p>${esc(b.text)}</p>` : ""}
+            </div>`).join("")}
+        </section>` : ""}
 
         <section class="section">
           <div class="p-meta">

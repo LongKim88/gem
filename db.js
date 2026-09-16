@@ -134,6 +134,7 @@ function init() {
   try { db.exec("ALTER TABLE products ADD COLUMN category TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE products ADD COLUMN subcat TEXT"); } catch (e) {} // 직판 하위 카테고리
   try { db.exec("ALTER TABLE products ADD COLUMN brand TEXT"); } catch (e) {}  // 브랜드(3단계)
+  try { db.exec("ALTER TABLE products ADD COLUMN detail TEXT"); } catch (e) {} // 상세 블록 JSON [{image,text}]
 
   // 카테고리 개편(5분류 → 3분류) 이전 상품을 새 구조로 이관.
   // 현재 CATEGORIES 에 없는 카테고리의 상품만 대상 — 럭셔리 목록에 있으면 이동, 아니면 숨김(active=0).

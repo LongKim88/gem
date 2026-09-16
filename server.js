@@ -147,6 +147,22 @@ function productPlace(req) {
   if (brand && !(cat.brands || []).some((x) => x.id === brand)) throw new Error("브랜드 값이 올바르지 않습니다.");
   return { category: cat.id, subcat, brand: brand || null };
 }
+/* 상세 블록 [{image,text}] — 폼에서 JSON 문자열로 온다. 빈 블록은 버림. */
+function parseDetail(raw) {
+  if (raw == null || raw === "") return null;
+  let arr;
+  try { arr = JSON.parse(raw); } catch (e) { throw new Error("상세 내용 형식이 올바르지 않습니다."); }
+  if (!Array.isArray(arr)) throw new Error("상세 내용 형식이 올바르지 않습니다.");
+  const blocks = arr
+    .map((b) => ({ image: String((b && b.image) || "").trim(), text: String((b && b.text) || "").trim() }))
+    .filter((b) => b.image || b.text);
+  if (blocks.length > 30) throw new Error("상세 블록은 30개까지입니다.");
+  // 업로드 경로 또는 http(s) URL 만 허용 (javascript: 등 차단)
+  for (const b of blocks)
+    if (b.image && !/^(\/uploads\/|https?:\/\/)/.test(b.image))
+      throw new Error("이미지 주소가 올바르지 않습니다.");
+  return blocks.length ? JSON.stringify(blocks) : null;
+}
 /* 상품을 걸 수 있는 카테고리인지 (직판 + 상담 전용 제외) */
 function catalogCat(catId) {
   const c = CATEGORIES.find((x) => x.id === catId);
@@ -210,7 +226,7 @@ app.get("/api/direct/:catId/products", (req, res) => {
 app.get("/api/products/:id", (req, res) => {
   const p = db
     .prepare(
-      `SELECT p.id, p.title, p.description, p.price, p.image, p.thumb, p.category, p.subcat, p.brand
+      `SELECT p.id, p.title, p.description, p.price, p.image, p.thumb, p.category, p.subcat, p.brand, p.detail
        FROM products p JOIN shops s ON s.id = p.shop_id
        WHERE p.id=? AND s.role='official' AND s.active=1 AND p.active=1`
     )
@@ -294,6 +310,17 @@ app.post("/api/my/cover", requireShop, upload.single("image"), async (req, res) 
   }
 });
 
+// 상세 블록용 이미지 1장 업로드 — 저장은 상품 저장 시점에 JSON 으로
+app.post("/api/my/upload", requireShop, upload.single("image"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "이미지를 선택하세요." });
+  try {
+    const out = await processImage(req.file.buffer);
+    res.json({ image: out.image, thumb: out.thumb });
+  } catch (e) {
+    res.status(400).json({ error: "이미지 처리 중 오류: " + e.message });
+  }
+});
+
 app.get("/api/my/products", requireShop, (req, res) => {
   const rows = db
     .prepare("SELECT * FROM products WHERE shop_id=? AND active=1 ORDER BY created_at DESC, id DESC")
@@ -340,9 +367,13 @@ app.post("/api/my/products", requireShop, upload.single("image"), async (req, re
     }
   }
 
+  let detail;
+  try { detail = parseDetail(req.body.detail); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+
   const info = db
-    .prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, kind, category, subcat, brand) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(req.shop.id, String(title).trim(), description || null, price || null, image, thumb, kind, category, subcat, brand);
+    .prepare("INSERT INTO products (shop_id, title, description, price, image, thumb, kind, category, subcat, brand, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(req.shop.id, String(title).trim(), description || null, price || null, image, thumb, kind, category, subcat, brand, detail);
   const product = db.prepare("SELECT * FROM products WHERE id=?").get(Number(info.lastInsertRowid));
   res.status(201).json({ product, count: count + 1, limit });
 });
@@ -372,10 +403,14 @@ app.patch("/api/my/products/:id", requireShop, upload.single("image"), async (re
     }
   }
 
+  let detail;
+  try { detail = parseDetail(req.body.detail); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+
   db.prepare(
-    "UPDATE products SET title=?, description=?, price=?, image=?, thumb=?, kind=?, category=?, subcat=?, brand=? WHERE id=?"
+    "UPDATE products SET title=?, description=?, price=?, image=?, thumb=?, kind=?, category=?, subcat=?, brand=?, detail=? WHERE id=?"
   ).run(String(title).trim(), description || null, price || null, image, thumb, kind,
-        place.category, place.subcat, place.brand, p.id);
+        place.category, place.subcat, place.brand, detail, p.id);
   res.json({ product: db.prepare("SELECT * FROM products WHERE id=?").get(p.id) });
 });
 

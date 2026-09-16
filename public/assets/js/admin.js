@@ -16,6 +16,7 @@
     feed: { category: "", kind: "", today: false },
     ptab: "supply",            // 플랫폼: supply | settle | shops | orders | issue
     editing: null,             // 수정 중인 상품 id (null = 신규 등록)
+    blocks: [],                // 상세 블록 [{image,text}]
     supplyGroup: "day",        // 공급 상품 구분: day | week | month
     settle: { status: "", period: "all" }, // 정산 필터
   };
@@ -303,7 +304,12 @@
             <input name="description" type="text" placeholder="예: 가을 신상 · 4color" ${full ? "disabled" : ""} />
           </div>
           <div class="field">
-            <label>사진 ${edit ? "(바꿀 때만 선택 — 비워두면 기존 사진 유지)" : "(선택)"}</label>
+            <label>상세 내용 (선택) — 이미지 + 설명을 순서대로 쌓습니다</label>
+            <div id="blk-list" class="blk-list"></div>
+            <button type="button" class="btn-ghost" id="blk-add">＋ 블록 추가</button>
+          </div>
+          <div class="field">
+            <label>대표 사진 ${edit ? "(바꿀 때만 선택 — 비워두면 기존 사진 유지)" : "(선택)"}</label>
             <input name="image" type="file" accept="image/*" ${full && !edit ? "disabled" : ""} />
           </div>
           <button class="btn-primary" type="submit" ${full && !edit ? "disabled" : ""}>${edit ? "수정 저장" : full ? "한도 초과 — 업로드 불가" : "상품 등록"}</button>
@@ -328,6 +334,8 @@
         (cat.brands || []).map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
     }
     if (catSel) { fillPlace(); catSel.onchange = fillPlace; }
+
+    mountBlocks(edit);
 
     // 수정 모드: 기존 값으로 폼을 채운다 (하위분류·브랜드는 fillPlace 뒤여야 선택됨)
     const form = document.getElementById("up-form");
@@ -371,6 +379,7 @@
         if (isOfficial && !String(fd.get("subcat") || "").trim()) {
           errEl.textContent = "카테고리와 하위분류를 선택하세요."; return;
         }
+        fd.set("detail", JSON.stringify(state.blocks));
         const btn = form.querySelector('button[type="submit"]');
         btn.disabled = true; btn.textContent = "저장 중…";
         try {
@@ -386,6 +395,78 @@
         }
       };
     }
+  }
+
+  /* ---------- 상세 블록 에디터 (이미지 + 설명 반복) ---------- */
+  function mountBlocks(edit) {
+    const list = document.getElementById("blk-list");
+    if (!list) return;
+    try { state.blocks = edit && edit.detail ? JSON.parse(edit.detail) : []; }
+    catch (e) { state.blocks = []; }
+
+    function draw() {
+      list.innerHTML = state.blocks.map((b, i) => `
+        <div class="blk" data-i="${i}">
+          <div class="blk-head">
+            <b>${i + 1}</b>
+            <div class="blk-tools">
+              <button type="button" class="icon-btn" data-blk="up" ${i === 0 ? "disabled" : ""} title="위로">↑</button>
+              <button type="button" class="icon-btn" data-blk="down" ${i === state.blocks.length - 1 ? "disabled" : ""} title="아래로">↓</button>
+              <button type="button" class="icon-btn" data-blk="del" title="삭제">🗑️</button>
+            </div>
+          </div>
+          <div class="blk-drop${b.image ? " has" : ""}" data-blk="drop">
+            ${b.image
+              ? `<img src="${esc(b.image)}" alt="" /><span class="blk-swap">클릭 또는 드래그해서 교체</span>`
+              : `<span>이미지를 여기로 끌어다 놓거나 클릭해서 선택</span>`}
+          </div>
+          <textarea data-blk="text" rows="3" placeholder="이 이미지에 대한 설명">${esc(b.text || "")}</textarea>
+        </div>`).join("")
+        || `<div class="blk-empty">＋ 블록 추가를 눌러 이미지와 설명을 쌓으세요.</div>`;
+      wire();
+    }
+
+    async function upload(file, i) {
+      if (!file || !/^image\//.test(file.type)) { toast("이미지 파일만 올릴 수 있습니다.", true); return; }
+      const drop = list.querySelector(`.blk[data-i="${i}"] [data-blk="drop"]`);
+      if (drop) drop.innerHTML = `<span>올리는 중…</span>`;
+      const fd = new FormData();
+      fd.append("image", file);
+      try {
+        const r = await jform("/api/my/upload", fd);
+        state.blocks[i].image = r.image;
+      } catch (e) { toast(e.message, true); }
+      draw();
+    }
+
+    function wire() {
+      list.querySelectorAll(".blk").forEach((el) => {
+        const i = Number(el.getAttribute("data-i"));
+        el.querySelector('[data-blk="text"]').oninput = (e) => { state.blocks[i].text = e.target.value; };
+        el.querySelector('[data-blk="del"]').onclick = () => { state.blocks.splice(i, 1); draw(); };
+        const up = el.querySelector('[data-blk="up"]');
+        const down = el.querySelector('[data-blk="down"]');
+        up.onclick = () => { state.blocks.splice(i - 1, 0, state.blocks.splice(i, 1)[0]); draw(); };
+        down.onclick = () => { state.blocks.splice(i + 1, 0, state.blocks.splice(i, 1)[0]); draw(); };
+
+        const drop = el.querySelector('[data-blk="drop"]');
+        drop.onclick = () => {
+          const f = document.createElement("input");
+          f.type = "file"; f.accept = "image/*";
+          f.onchange = () => upload(f.files[0], i);
+          f.click();
+        };
+        drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+        drop.ondragleave = () => drop.classList.remove("over");
+        drop.ondrop = (e) => {
+          e.preventDefault(); drop.classList.remove("over");
+          upload(e.dataTransfer.files[0], i);
+        };
+      });
+    }
+
+    document.getElementById("blk-add").onclick = () => { state.blocks.push({ image: "", text: "" }); draw(); };
+    draw();
   }
 
   /* ---------- 비밀번호 변경 (모든 역할 공통) ---------- */

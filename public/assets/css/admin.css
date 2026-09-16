@@ -308,3 +308,33 @@
   border-radius: 10px; padding: 12px; font-size: 13px; margin-top: 12px;
 }
 .issued code { color: var(--gold); font-weight: 800; }
+
+/* ---------- 상세 블록 에디터 ---------- */
+.blk-list { display: grid; gap: 12px; margin-bottom: 10px; }
+.blk-empty { padding: 18px; text-align: center; color: var(--muted); font-size: 13px;
+  border: 1px dashed var(--line); border-radius: 12px; }
+.blk { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--card-2); }
+.blk-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.blk-head b { color: var(--gold); font-size: 13px; }
+.blk-tools { display: flex; gap: 4px; }
+.blk-tools .icon-btn:disabled { opacity: 0.3; cursor: default; }
+
+.blk-drop {
+  position: relative; display: grid; place-items: center;
+  min-height: 120px; padding: 12px; text-align: center;
+  border: 1px dashed var(--line); border-radius: 10px;
+  color: var(--muted); font-size: 12.5px; cursor: pointer;
+}
+.blk-drop.over { border-color: var(--gold); background: rgba(231, 195, 122, 0.08); }
+.blk-drop.has { padding: 0; border-style: solid; overflow: hidden; }
+.blk-drop img { width: 100%; max-height: 280px; object-fit: contain; display: block; }
+.blk-swap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 6px;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 11.5px;
+}
+.blk textarea {
+  width: 100%; margin-top: 8px; padding: 9px 11px; resize: vertical;
+  background: var(--input, #1a1715); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px;
+  font: inherit; font-size: 13.5px; line-height: 1.6;
+}
