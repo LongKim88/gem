@@ -42,8 +42,18 @@ app.use(
   })
 );
 
-// 정적 파일 (앱 코드는 짧은 캐시)
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
+/* 정적 파일.
+   HTML 은 항상 재검증(no-cache)해야 한다. HTML 이 캐시되면 그 안의 ?v= 번호도 함께 굳어서
+   CSS/JS 를 아무리 올려도 옛 버전을 계속 요청하게 된다. (ETag 가 있어 대개 304 로 끝난다)
+   버전이 붙은 css/js 와 이미지는 1시간 캐시 그대로. */
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    maxAge: "1h",
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache");
+    },
+  })
+);
 // 업로드 이미지: 파일명이 고유(불변)하므로 1년 강력 캐시
 app.use(
   "/uploads",
@@ -660,7 +670,10 @@ app.get("/api/admin/supply-orders", requirePlatform, (req, res) => {
 });
 
 /* 나이스 URL: /admin → 관리자 페이지 */
-app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
+app.get("/admin", (req, res) => {
+  res.setHeader("Cache-Control", "no-cache"); // 위와 같은 이유
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
 
 /* multer/기타 에러 핸들러 */
 app.use((err, req, res, next) => {
