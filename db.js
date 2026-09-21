@@ -23,7 +23,7 @@ db.exec("PRAGMA foreign_keys = ON;");
 const CATEGORIES = [
   // 전면 직판(우리 직영) 모델: 5개 카테고리 모두 mode 'direct' (업체 리스트 없이 하위분류 → 상품 직접 노출)
   // 골프는 3단계: 대분류(골프) → 하위 카테고리(의류/가방/신발/소품) → 브랜드
-  { id: "golf", name: "골프", icon: "🏌️", image: "assets/img/cat-golfwear.webp", mode: "direct",
+  { id: "golf", name: "골프", icon: "🏌️", image: "assets/img/cat-golf.webp", mode: "direct",
     subcats: [
       { id: "wear", name: "의류", image: "assets/img/p-golfpolo.webp" },
       { id: "bag", name: "가방", image: "assets/img/g-cartbag.webp" },
@@ -38,7 +38,7 @@ const CATEGORIES = [
       { id: "amazingcre", name: "AmazingCre", logo: "assets/img/brand-amazingcre.webp?v=2" },
       { id: "anewgolf", name: "ANEW GOLF", logo: "assets/img/brand-anewgolf.webp?v=2" },
     ] },
-  { id: "luxury", name: "럭셔리", icon: "✨", image: "assets/img/cat-luxwear.webp", mode: "direct",
+  { id: "luxury", name: "럭셔리", icon: "✨", image: "assets/img/cat-luxury.webp", mode: "direct",
     subcats: [
       { id: "wear", name: "의류", image: "assets/img/p-cashcoat.webp" },
       { id: "bag", name: "가방", image: "assets/img/p-tote.webp" },
@@ -61,7 +61,7 @@ const CATEGORIES = [
       { id: "balenciaga", name: "BALENCIAGA", logo: "assets/img/brand-balenciaga.webp?v=1" },
     ] },
   // consult: true → 하위 카테고리 선택 시 상품 목록 대신 '상담 페이지'(카카오톡 오픈톡 연결)
-  { id: "order", name: "구매대행", icon: "🧾", image: "assets/img/cat-luxgoods.webp", mode: "direct", consult: true,
+  { id: "order", name: "구매대행", icon: "🧾", image: "assets/img/cat-order.webp", mode: "direct", consult: true,
     subcats: [
       { id: "wear", name: "의류", image: "assets/img/p-blazer.webp" },
       { id: "bag", name: "가방", image: "assets/img/p-crossbag.webp" },
