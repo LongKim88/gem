@@ -221,7 +221,7 @@
   function renderBrandGrid(cat, subcat) {
     const sub = (cat.subcats || []).find((s) => s.id === subcat) || {};
     const buttons = (cat.brands || []).map((b) => `
-      <button class="cat-btn brand-tile" onclick="location.hash='#/cat/${esc(cat.id)}/${esc(subcat)}/${esc(b.id)}'" aria-label="${esc(b.name)}">
+      <button class="cat-btn brand-tile${b.logo ? " has-btn" : ""}" onclick="location.hash='#/cat/${esc(cat.id)}/${esc(subcat)}/${esc(b.id)}'" aria-label="${esc(b.name)}">
         <span class="cat-text">
           ${b.logo
             ? `<img class="brand-logo" src="${esc(b.logo)}" alt="${esc(b.name)}" loading="lazy" decoding="async"
